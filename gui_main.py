@@ -1009,9 +1009,16 @@ class AppManager:
                 return
             
             wants_popup = False
-            if "[EKRANDA_GOSTER]" in response or "[EKRANDA_GÖSTER]" in response:
+            import re
+            # Daha esnek bir kontrol (büyük/küçük harf, alt tire veya boşluk, türkçe karakter vs.)
+            if re.search(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', response, re.IGNORECASE):
                 wants_popup = True
-                response = response.replace("[EKRANDA_GOSTER]", "").replace("[EKRANDA_GÖSTER]", "").strip()
+                response = re.sub(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', '', response, flags=re.IGNORECASE).strip()
+            
+            # Eğer yanıt sadece bir düşünce bloğundan ibaretse veya bomboşsa ama AI etiket koymadıysa
+            # Hata olmaması adına, cevap 15 karakterden uzunsa ve kod bloğu içermiyorsa varsayılan olarak göster!
+            if not wants_popup and len(response) > 20 and "```" not in response and not response.startswith("./"):
+                wants_popup = True
 
             print(f"\n[Dikte]: {text}\n[Yanıt]: {response}\n", flush=True)
 
