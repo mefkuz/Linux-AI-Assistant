@@ -956,7 +956,6 @@ class AppManager:
             context_keywords = ["pano", "kopyala", "bunu", "şunu", "bu ", "buradaki", "ekran"]
             
             if any(kw in lower_text for kw in context_keywords):
-                import os
                 import subprocess
                 
                 wants_screen = "ekran" in lower_text
@@ -1029,11 +1028,6 @@ class AppManager:
             if re.search(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', response, re.IGNORECASE):
                 wants_popup = True
                 response = re.sub(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', '', response, flags=re.IGNORECASE).strip()
-            
-            # Eğer yanıt sadece bir düşünce bloğundan ibaretse veya bomboşsa ama AI etiket koymadıysa
-            # Hata olmaması adına, cevap 15 karakterden uzunsa ve kod bloğu içermiyorsa varsayılan olarak göster!
-            if not wants_popup and len(response) > 20 and "```" not in response and not response.startswith("./"):
-                wants_popup = True
 
             print(f"\n[Dikte]: {text}\n[Yanıt]: {response}\n", flush=True)
 
