@@ -845,18 +845,46 @@ class AppManager:
         self.tray.show()
 
     def _check_single_instance(self):
+        import signal
+        is_trigger = "--trigger" in sys.argv
         self._lock_file = "/tmp/ai_dikte.lock"
         self._lock_fd = os.open(self._lock_file, os.O_RDWR | os.O_CREAT, 0o666)
         try:
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.ftruncate(self._lock_fd, 0)
+            os.write(self._lock_fd, str(os.getpid()).encode())
         except (BlockingIOError, OSError):
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle("Uygulama Zaten Çalışıyor")
-            msg.setText("Linux-AI-Assistant şu anda arka planda zaten açık!")
-            msg.setInformativeText("Lütfen sağ alt köşedeki (Sistem Çekmecesi) ikona sağ tıklayıp işlem yapın. Kapatmak için Çıkış'a basabilirsiniz.")
-            msg.exec()
-            sys.exit(0)
+            if is_trigger:
+                try:
+                    with open(self._lock_file, 'r') as f:
+                        pid = int(f.read().strip())
+                    os.kill(pid, signal.SIGUSR1)
+                except Exception:
+                    pass
+                sys.exit(0)
+            else:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setWindowTitle("Uygulama Zaten Çalışıyor")
+                msg.setText("Linux-AI-Assistant şu anda arka planda zaten açık!")
+                msg.setInformativeText("Lütfen sağ alt köşedeki (Sistem Çekmecesi) ikona sağ tıklayıp işlem yapın. Kapatmak için Çıkış'a basabilirsiniz.\n\nEğer asistanı manuel tetiklemek istiyorsanız '--trigger' argümanı ile çalıştırın.")
+                msg.exec()
+                sys.exit(0)
+
+        # Sinyal dinleyiciyi kur (Wayland ve X11 uyumlu evrensel tetikleyici)
+        self._sigusr1_received = False
+        signal.signal(signal.SIGUSR1, self._sig_handler)
+        self._sig_timer = QTimer(self.app)
+        self._sig_timer.timeout.connect(self._check_sigusr1)
+        self._sig_timer.start(100)
+
+    def _sig_handler(self, signum, frame):
+        self._sigusr1_received = True
+
+    def _check_sigusr1(self):
+        if self._sigusr1_received:
+            self._sigusr1_received = False
+            self.on_hotkey_triggered()
 
     def on_hotkey_triggered(self):
         current_time = time.time()

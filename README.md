@@ -59,10 +59,18 @@ The project includes an intelligent installer script that automatically detects 
    ```
 
 3. Launch the application:
-   You can find **Linux-AI-Assistant** (or AI-Bridge) in your application launcher, or start it directly from the terminal:
+   You can find **Linux-AI-Assistant** in your application launcher, or start it directly from the terminal:
    ```bash
    ./venv/bin/python gui_main.py
    ```
+
+### 🎯 Wayland & Global Hotkeys
+If you are using a modern Wayland compositor (like GNOME Wayland or Hyprland), traditional global hotkeys (via pynput) might be blocked by the OS for security reasons. 
+You can easily bypass this by mapping a custom keyboard shortcut in your OS settings to the following command:
+```bash
+/path/to/Linux-AI-Assistant/venv/bin/python /path/to/Linux-AI-Assistant/gui_main.py --trigger
+```
+This safely signals the background process to instantly wake up and start listening, making it 100% compatible with any Linux environment!
 
 ## Requirements & Dependencies
 
