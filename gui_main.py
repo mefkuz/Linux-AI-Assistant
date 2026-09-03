@@ -286,12 +286,15 @@ class OverlayWindow(QWidget):
     def _init_ui(self):
         global _APP_LANG
         _APP_LANG = self.settings.get('app_language', 'tr')
-        # BypassWindowManagerHint bazı WM'lerde pencereyi görünmez yapıyor, kaldırıldı
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
-        )
+        # Eğer sticky_window açıksa X11/Wayland üzerinde ToolTip bayrağı kullanılarak
+        # pencerenin tüm masaüstlerinde ve monitörlerde yapışkan (sticky) kalması sağlanır.
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        if self.settings.get("sticky_window", True):
+            flags |= Qt.WindowType.ToolTip
+        else:
+            flags |= Qt.WindowType.Tool
+        
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         container = QWidget(self)
@@ -1149,6 +1152,16 @@ class AppManager:
         self._resp_win.exec()
 
     def _show_overlay(self):
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        if self.settings.get("sticky_window", True):
+            flags |= Qt.WindowType.ToolTip
+        else:
+            flags |= Qt.WindowType.Tool
+        
+        # Sadece bayrak değiştiyse güncelle (gereksiz hide/show olmasın)
+        if self.overlay.windowFlags() != flags:
+            self.overlay.setWindowFlags(flags)
+            
         self.overlay.reposition()
         self.overlay.show()
         self.overlay.raise_()
