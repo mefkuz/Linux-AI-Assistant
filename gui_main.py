@@ -344,16 +344,29 @@ class OverlayWindow(QWidget):
         self.resize(260, 100)
 
     def reposition(self):
-        screen = QApplication.primaryScreen().availableGeometry()
+        from PyQt6.QtGui import QCursor
+        
+        # Eğer sticky_window aktifse mouse imlecinin olduğu ekrana yapışır,
+        # değilse her zaman birincil ekranda (primary monitor) çıkar.
+        is_sticky = self.settings.get("sticky_window", True)
+        if is_sticky:
+            screen_obj = QApplication.screenAt(QCursor.pos())
+            if not screen_obj:
+                screen_obj = QApplication.primaryScreen()
+        else:
+            screen_obj = QApplication.primaryScreen()
+            
+        screen = screen_obj.availableGeometry()
+        
         pos    = self.settings.get("overlay_position", "Bottom-Right")
         m      = 28
         w, h   = self.width(), self.height()
         coords = {
-            "Bottom-Right": (screen.width()  - w - m, screen.height() - h - m),
-            "Bottom-Left":  (m,                        screen.height() - h - m),
-            "Top-Right":    (screen.width()  - w - m, m),
-            "Top-Left":     (m,                        m),
-            "Center":       ((screen.width()  - w) // 2, (screen.height() - h) // 2),
+            "Bottom-Right": (screen.x() + screen.width()  - w - m, screen.y() + screen.height() - h - m),
+            "Bottom-Left":  (screen.x() + m,                        screen.y() + screen.height() - h - m),
+            "Top-Right":    (screen.x() + screen.width()  - w - m, screen.y() + m),
+            "Top-Left":     (screen.x() + m,                        screen.y() + m),
+            "Center":       (screen.x() + (screen.width()  - w) // 2, screen.y() + (screen.height() - h) // 2),
         }
         x, y = coords.get(pos, coords["Bottom-Right"])
         self.move(x, y)
@@ -493,6 +506,10 @@ class SettingsWindow(QWidget):
         ws_row.addWidget(self.workspace_input)
         ws_row.addWidget(ws_browse)
         fl.addRow(tr("Çalışma alanı:"), ws_row)
+
+        self.sticky_cb = QCheckBox("Bildirimleri aktif masaüstüne yapıştır (Sticky Window)")
+        self.sticky_cb.setChecked(self.settings.get("sticky_window", True))
+        fl.addRow("", self.sticky_cb)
 
         tabs.addTab(tab_general, tr("Genel"))
 
@@ -726,6 +743,7 @@ class SettingsWindow(QWidget):
         s.set("language",                self.lang_combo.currentData())
         s.set("app_language",            self.app_lang_combo.currentData())
         s.set("workspace_dir",           self.workspace_input.text().strip())
+        s.set("sticky_window",           self.sticky_cb.isChecked())
         s.set("overlay_timeout_seconds", self.timeout_spin.value())
         s.set("overlay_display_seconds", self.display_spin.value())
         s.set("mic_sensitivity",         self.sensitivity_spin.value())

@@ -44,6 +44,7 @@ DEFAULT_SETTINGS = {
     "auto_show_popup": False,
     "optimize_dictation": False,
     "auto_allow_clipboard": False,
+    "sticky_window": True,
 
     # Sistem Promptu
     "system_prompt": (
