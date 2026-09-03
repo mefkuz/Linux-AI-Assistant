@@ -82,6 +82,13 @@ class SettingsManager:
         try:
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=4, ensure_ascii=False)
+            
+            # Gizlilik ve Güvenlik: API anahtarlarının sızmasını engellemek için
+            # dosyayı sadece dosya sahibinin okuyabileceği hale getir.
+            try:
+                os.chmod(CONFIG_FILE, 0o600)
+            except OSError:
+                pass # Windows veya özel yetki gerektiren durumlar için sessiz kal
         except IOError as e:
             logger.error(f"Ayarlar kaydedilemedi: {e}")
 

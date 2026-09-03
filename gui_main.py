@@ -996,6 +996,16 @@ class AppManager:
                                             screen_text = f.read().strip()
                         except Exception as e:
                             logger.error(f"OCR Hatası: {e}")
+                        finally:
+                            # Gizlilik ve Güvenlik: Ekran görüntüsü ve OCR metnini bellekten okuduktan sonra
+                            # /tmp/ dizinindeki bu hassas dosyaları derhal sil!
+                            try:
+                                if os.path.exists(ss_path):
+                                    os.remove(ss_path)
+                                if os.path.exists(txt_path + ".txt"):
+                                    os.remove(txt_path + ".txt")
+                            except OSError:
+                                pass
 
                     combined_context = ""
                     if clip_text:
