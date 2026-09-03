@@ -959,46 +959,51 @@ class AppManager:
                 import os
                 import subprocess
                 
-                clip_text = current_clipboard_text
+                wants_screen = "ekran" in lower_text
+                has_permission = self.settings.get("auto_allow_clipboard", False)
                 
-                # Ekran görüntüsü ve OCR (eğer cümlede 'ekran' kelimesi geçiyorsa)
-                screen_text = ""
-                if "ekran" in lower_text:
-                    self.comm.update_text.emit("Ekran Okunuyor (OCR)...")
-                    try:
-                        ss_path = "/tmp/ai_dikte_screen.png"
-                        txt_path = "/tmp/ai_dikte_screen"
+                if not has_permission:
+                    preview = ""
+                    if wants_screen:
+                        preview += "[DİKKAT: Ekranınızın Görüntüsü Çekilip Analiz Edilecek!]\n\n"
+                    if current_clipboard_text:
+                        preview += f"[PANO ÖNİZLEME]: {current_clipboard_text[:100]}...\n"
                         
-                        # Ekran resmi al (Wayland/X11 desteği için sırayla dene)
-                        if os.system(f"grim {ss_path} >/dev/null 2>&1") != 0:
-                            if os.system(f"spectacle -b -n -o {ss_path} >/dev/null 2>&1") != 0:
-                                os.system(f"gnome-screenshot -f {ss_path} >/dev/null 2>&1")
-                        
-                        if os.path.exists(ss_path):
-                            # Tesseract OCR
-                            if os.system(f"tesseract {ss_path} {txt_path} -l tur+eng >/dev/null 2>&1") == 0:
-                                if os.path.exists(txt_path + ".txt"):
-                                    with open(txt_path + ".txt", "r", encoding="utf-8") as f:
-                                        screen_text = f.read().strip()
-                    except Exception as e:
-                        logger.error(f"OCR Hatası: {e}")
+                    result = [False]
+                    ev = threading.Event()
+                    self.comm.ask_clipboard.emit(result, ev, preview.strip())
+                    ev.wait()
+                    has_permission = result[0]
 
-                combined_context = ""
-                if clip_text:
-                    combined_context += f"[Kullanıcının Panosundaki Metin]:\n{clip_text}\n\n"
-                if screen_text:
-                    combined_context += f"[Kullanıcının Ekranındaki Metin (OCR)]:\n{screen_text}\n\n"
-                
-                if combined_context.strip():
-                    if self.settings.get("auto_allow_clipboard", False):
-                        context = combined_context.strip()
-                    else:
-                        result = [False]
-                        ev = threading.Event()
-                        self.comm.ask_clipboard.emit(result, ev, combined_context.strip())
-                        ev.wait()
-                        if result[0]:
-                            context = combined_context.strip()
+                if has_permission:
+                    clip_text = current_clipboard_text
+                    screen_text = ""
+                    
+                    if wants_screen:
+                        self.comm.update_text.emit("Ekran Okunuyor (OCR)...")
+                        try:
+                            ss_path = "/tmp/ai_dikte_screen.png"
+                            txt_path = "/tmp/ai_dikte_screen"
+                            
+                            if os.system(f"grim {ss_path} >/dev/null 2>&1") != 0:
+                                if os.system(f"spectacle -b -n -o {ss_path} >/dev/null 2>&1") != 0:
+                                    os.system(f"gnome-screenshot -f {ss_path} >/dev/null 2>&1")
+                            
+                            if os.path.exists(ss_path):
+                                if os.system(f"tesseract {ss_path} {txt_path} -l tur+eng >/dev/null 2>&1") == 0:
+                                    if os.path.exists(txt_path + ".txt"):
+                                        with open(txt_path + ".txt", "r", encoding="utf-8") as f:
+                                            screen_text = f.read().strip()
+                        except Exception as e:
+                            logger.error(f"OCR Hatası: {e}")
+
+                    combined_context = ""
+                    if clip_text:
+                        combined_context += f"[Kullanıcının Panosundaki Metin]:\n{clip_text}\n\n"
+                    if screen_text:
+                        combined_context += f"[Kullanıcının Ekranındaki Metin (OCR)]:\n{screen_text}\n\n"
+                    
+                    context = combined_context.strip()
 
             self.comm.update_text.emit(tr("Yapay Zekanın Cevabı Bekleniyor..."))
 
