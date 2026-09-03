@@ -1,8 +1,8 @@
-# Linux AI System Bridge
+# Linux AI Assistant
 
 A highly configurable, context-aware voice assistant and system bridge designed exclusively for Linux desktop environments. 
 
-While there are many AI assistants available for Windows and macOS, Linux power users often lack a deeply integrated, native tool that respects the Linux ecosystem. Linux AI System Bridge bridges this gap by offering a seamless overlay interface, robust context awareness (screen OCR and clipboard reading), and flexible API support, all while remaining completely unobtrusive to your workflow.
+While there are many AI assistants available for Windows and macOS, Linux power users often lack a deeply integrated, native tool that respects the Linux ecosystem. Linux AI Assistant bridges this gap by offering a seamless overlay interface, robust context awareness (screen OCR and clipboard reading), and flexible API support, all while remaining completely unobtrusive to your workflow.
 
 ## Key Features
 
@@ -24,7 +24,7 @@ When triggered via your custom global hotkey, the minimal listening overlay appe
 
 ### Configuration & Settings
 
-Linux AI System Bridge is highly customizable, putting the control entirely in your hands.
+Linux AI Assistant is highly customizable, putting the control entirely in your hands.
 
 **General Settings**  
 Configure your global hotkey and choose the application language.  
@@ -48,8 +48,8 @@ The project includes an intelligent installer script that automatically detects 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/Linux-AI-System-Bridge.git
-   cd Linux-AI-System-Bridge
+   git clone https://github.com/yourusername/Linux-AI-Assistant.git
+   cd Linux-AI-Assistant
    ```
 
 2. Make the installer executable and run it:
@@ -59,7 +59,7 @@ The project includes an intelligent installer script that automatically detects 
    ```
 
 3. Launch the application:
-   You can find **AI-Dikte** (or AI-Bridge) in your application launcher, or start it directly from the terminal:
+   You can find **Linux-AI-Assistant** (or AI-Bridge) in your application launcher, or start it directly from the terminal:
    ```bash
    ./venv/bin/python gui_main.py
    ```

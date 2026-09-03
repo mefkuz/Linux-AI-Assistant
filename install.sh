@@ -2,7 +2,7 @@
 set -e
 
 echo "======================================"
-echo "    AI-Dikte Kurulum Sihirbazı"
+echo "    Linux-AI-Assistant Kurulum Sihirbazı"
 echo "======================================"
 
 # Scriptin bulunduğu dizini al
@@ -47,8 +47,8 @@ mkdir -p "$APPS_DIR"
 mkdir -p "$AUTOSTART_DIR"
 
 DESKTOP_FILE_CONTENT="[Desktop Entry]
-Name=AI-Dikte
-Comment=Akıllı Sistem Köprüsü ve Sesli Asistan
+Name=Linux-AI-Assistant
+Comment=Akıllı Linux AI Assistant ve Sesli Asistan
 Exec=$APP_DIR/venv/bin/python $APP_DIR/gui_main.py
 Path=$APP_DIR
 Icon=audio-input-microphone
@@ -58,16 +58,16 @@ Categories=Utility;Audio;
 StartupNotify=true"
 
 # Uygulama menüsü için kısayol
-echo "$DESKTOP_FILE_CONTENT" > "$APPS_DIR/ai-dikte.desktop"
-chmod +x "$APPS_DIR/ai-dikte.desktop"
+echo "$DESKTOP_FILE_CONTENT" > "$APPS_DIR/linux-ai-assistant.desktop"
+chmod +x "$APPS_DIR/linux-ai-assistant.desktop"
 
 # Bilgisayar açılışında otomatik başlama için kısayol
-echo "$DESKTOP_FILE_CONTENT" > "$AUTOSTART_DIR/ai-dikte.desktop"
-chmod +x "$AUTOSTART_DIR/ai-dikte.desktop"
+echo "$DESKTOP_FILE_CONTENT" > "$AUTOSTART_DIR/linux-ai-assistant.desktop"
+chmod +x "$AUTOSTART_DIR/linux-ai-assistant.desktop"
 
 echo "======================================"
 echo "Kurulum Tamamlandı!"
 echo "Uygulamanız menüye eklendi ve bilgisayar her açıldığında otomatik başlayacak."
-echo "AI-Dikte uygulamasını şimdi menüden aratarak veya aşağıdaki komutla başlatabilirsiniz:"
+echo "Linux-AI-Assistant uygulamasını şimdi menüden aratarak veya aşağıdaki komutla başlatabilirsiniz:"
 echo "$APP_DIR/venv/bin/python $APP_DIR/gui_main.py"
 echo "======================================"

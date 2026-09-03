@@ -18,7 +18,7 @@ logging.getLogger().setLevel(logging.WARNING)
 
 def main():
     print("=====================================================")
-    print("=      Sistem Köprüsü ve Yapay Zeka Entegratörü     =")
+    print("=      Linux AI Assistant ve Yapay Zeka Entegratörü     =")
     print("=====================================================")
     print("Mod: Bağlam Duyarlı CLI / LLM Arabirimi")
     print("Çıkmak için 'exit' veya 'quit' yazın.\n")
@@ -45,7 +45,7 @@ def main():
             response = router.parse_and_route(user_input)
             
             # Yanıtı Bastırma
-            print(f"\n[Sistem Köprüsü] >> {response}")
+            print(f"\n[Linux AI Assistant] >> {response}")
             
         except KeyboardInterrupt:
             print("\nOturum sonlandırılıyor (Ctrl+C)...")

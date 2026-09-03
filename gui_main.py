@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 
 TRANSLATIONS = {
-    "Sistem Köprüsü — Ayarlar": "System Bridge — Settings",
+    "Linux AI Assistant — Ayarlar": "Linux AI Assistant — Settings",
     "Genel": "General",
     "Dinleme": "Listening",
     "Yapay Zeka": "AI Settings",
@@ -436,7 +436,7 @@ class SettingsWindow(QWidget):
         self.hide()
 
     def _init_ui(self):
-        self.setWindowTitle(tr("Sistem Köprüsü — Ayarlar"))
+        self.setWindowTitle(tr("Linux AI Assistant — Ayarlar"))
         self.setFixedSize(650, 480)
 
         root = QVBoxLayout(self)
@@ -769,7 +769,7 @@ class AppManager:
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
-        self.app.setApplicationName("AI-Dikte")
+        self.app.setApplicationName("Linux-AI-Assistant")
         
         self._check_single_instance()
 
@@ -825,7 +825,7 @@ class AppManager:
         p.end()
 
         self.tray = QSystemTrayIcon(QIcon(pix), self.app)
-        self.tray.setToolTip("AI-Dikte\nSağ tıkla → Menü\nSol tıkla → Ayarlar")
+        self.tray.setToolTip("Linux-AI-Assistant\nSağ tıkla → Menü\nSol tıkla → Ayarlar")
         
         def tray_clicked(reason):
             if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -853,7 +853,7 @@ class AppManager:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Icon.Warning)
             msg.setWindowTitle("Uygulama Zaten Çalışıyor")
-            msg.setText("AI-Dikte şu anda arka planda zaten açık!")
+            msg.setText("Linux-AI-Assistant şu anda arka planda zaten açık!")
             msg.setInformativeText("Lütfen sağ alt köşedeki (Sistem Çekmecesi) ikona sağ tıklayıp işlem yapın. Kapatmak için Çıkış'a basabilirsiniz.")
             msg.exec()
             sys.exit(0)
