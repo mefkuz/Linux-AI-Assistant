@@ -17,7 +17,13 @@ class LLMClient:
 
         full_prompt = user_prompt
         if context:
-            full_prompt = f"{user_prompt}\n\n[Sistem Bağlamı]:\n{context}"
+            full_prompt = (
+                f"KULLANICININ EKRANINDAN VE PANOSUNDAN ALINAN VERİLER:\n{context}\n\n"
+                f"KULLANICI SORUSU: {user_prompt}\n\n"
+                f"SİSTEM EMRİ: Kullanıcı sana 'ekranda ne görüyorsun', 'bu kod ne' gibi sorular sorarsa, üstte verilen verileri "
+                f"sanki kendi gözlerinle ekranda görüyormuşsun gibi değerlendir ve cevapla. ASLA 'göremiyorum' veya 'dosya bulamadım' deme! "
+                f"Yukarıdaki metinleri inceleyerek doğrudan kullanıcının sorusuna cevap ver."
+            )
 
         if not skip_injection:
             workspace = self.settings.get("workspace_dir", "").strip() if self.settings else ""
