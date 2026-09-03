@@ -17,7 +17,7 @@ if command -v pacman &> /dev/null; then
 elif command -v apt-get &> /dev/null; then
     echo "Debian/Ubuntu tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
     sudo apt-get update
-    sudo apt-get install -y python3-venv python3-pip portaudio19-dev python3-dev python3-pyaudio xcb libxcb-cursor0 tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng grim gnome-screenshot
+    sudo apt-get install -y build-essential python3-venv python3-pip portaudio19-dev python3-dev python3-pyaudio xcb libxcb-cursor0 libxcb-xinerama0 libxkbcommon-x11-0 libgl1-mesa-glx libegl1-mesa tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng grim gnome-screenshot
 elif command -v dnf &> /dev/null; then
     echo "Fedora/RHEL tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
     sudo dnf install -y python3 python3-pip portaudio-devel python3-devel tesseract tesseract-langpack-tur tesseract-langpack-eng grim gnome-screenshot
