@@ -29,8 +29,17 @@ else
 fi
 
 echo "[2/4] Python Sanal Ortamı (venv) kuruluyor..."
+
+# Homebrew veya Conda gibi harici Python kurulumlarının Linux ses (PulseAudio)
+# sürücülerini bozmasını engellemek için doğrudan sistem Python'unu kullanmaya zorluyoruz.
+if [ -x "/usr/bin/python3" ]; then
+    PYTHON_CMD="/usr/bin/python3"
+else
+    PYTHON_CMD="python3"
+fi
+
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    $PYTHON_CMD -m venv venv
 fi
 source venv/bin/activate
 
