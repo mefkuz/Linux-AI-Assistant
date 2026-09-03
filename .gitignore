@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+settings.json
+Loglar/
+.idea/
+.vscode/
+*.log
+*.lock
+.env

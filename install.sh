@@ -1,0 +1,73 @@
+#!/bin/bash
+set -e
+
+echo "======================================"
+echo "    AI-Dikte Kurulum Sihirbazı"
+echo "======================================"
+
+# Scriptin bulunduğu dizini al
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+cd "$APP_DIR"
+
+echo "[1/4] Gerekli sistem paketleri kontrol ediliyor..."
+
+if command -v pacman &> /dev/null; then
+    echo "Arch Linux tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
+    sudo pacman -S --needed --noconfirm python python-pip python-virtualenv portaudio tesseract tesseract-data-tur tesseract-data-eng grim spectacle gnome-screenshot
+elif command -v apt-get &> /dev/null; then
+    echo "Debian/Ubuntu tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
+    sudo apt-get update
+    sudo apt-get install -y python3-venv python3-pip portaudio19-dev python3-dev python3-pyaudio xcb libxcb-cursor0 tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng grim gnome-screenshot
+elif command -v dnf &> /dev/null; then
+    echo "Fedora/RHEL tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
+    sudo dnf install -y python3 python3-pip portaudio-devel python3-devel tesseract tesseract-langpack-tur tesseract-langpack-eng grim gnome-screenshot
+elif command -v zypper &> /dev/null; then
+    echo "openSUSE tabanlı sistem algılandı. Gerekli paketler yükleniyor..."
+    sudo zypper install -y -n python3 python3-pip portaudio-devel python3-devel tesseract-ocr tesseract-ocr-traineddata-turkish tesseract-ocr-traineddata-english grim gnome-screenshot
+else
+    echo "Uyarı: 'pacman', 'apt', 'dnf' veya 'zypper' bulunamadı. Lütfen 'portaudio', 'tesseract' ve OCR dil paketlerinin sisteminizde kurulu olduğundan emin olun."
+fi
+
+echo "[2/4] Python Sanal Ortamı (venv) kuruluyor..."
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+fi
+source venv/bin/activate
+
+echo "[3/4] Python kütüphaneleri yükleniyor..."
+pip install --upgrade pip
+pip install PyQt6 pyaudio SpeechRecognition pynput requests gTTS pygame
+
+echo "[4/4] Masaüstü ve Başlangıç (Autostart) kısayolları oluşturuluyor..."
+
+# Masaüstü ve Autostart dizinleri
+APPS_DIR="$HOME/.local/share/applications"
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$APPS_DIR"
+mkdir -p "$AUTOSTART_DIR"
+
+DESKTOP_FILE_CONTENT="[Desktop Entry]
+Name=AI-Dikte
+Comment=Akıllı Sistem Köprüsü ve Sesli Asistan
+Exec=$APP_DIR/venv/bin/python $APP_DIR/gui_main.py
+Path=$APP_DIR
+Icon=audio-input-microphone
+Terminal=false
+Type=Application
+Categories=Utility;Audio;
+StartupNotify=true"
+
+# Uygulama menüsü için kısayol
+echo "$DESKTOP_FILE_CONTENT" > "$APPS_DIR/ai-dikte.desktop"
+chmod +x "$APPS_DIR/ai-dikte.desktop"
+
+# Bilgisayar açılışında otomatik başlama için kısayol
+echo "$DESKTOP_FILE_CONTENT" > "$AUTOSTART_DIR/ai-dikte.desktop"
+chmod +x "$AUTOSTART_DIR/ai-dikte.desktop"
+
+echo "======================================"
+echo "Kurulum Tamamlandı!"
+echo "Uygulamanız menüye eklendi ve bilgisayar her açıldığında otomatik başlayacak."
+echo "AI-Dikte uygulamasını şimdi menüden aratarak veya aşağıdaki komutla başlatabilirsiniz:"
+echo "$APP_DIR/venv/bin/python $APP_DIR/gui_main.py"
+echo "======================================"

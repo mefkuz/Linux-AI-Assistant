@@ -1,0 +1,6 @@
+requests==2.31.0
+python-dotenv==1.0.0
+PyQt6==6.5.2
+pynput==1.7.6
+SpeechRecognition>=3.17.0
+PyAudio

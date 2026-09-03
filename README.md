@@ -1,0 +1,88 @@
+# Linux AI System Bridge
+
+A highly configurable, context-aware voice assistant and system bridge designed exclusively for Linux desktop environments. 
+
+While there are many AI assistants available for Windows and macOS, Linux power users often lack a deeply integrated, native tool that respects the Linux ecosystem. Linux AI System Bridge bridges this gap by offering a seamless overlay interface, robust context awareness (screen OCR and clipboard reading), and flexible API support, all while remaining completely unobtrusive to your workflow.
+
+## Key Features
+
+- **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
+- **Context Awareness:** Can instantly read your clipboard and perform OCR on your screen (using native Linux tools like Grim, Spectacle, or Gnome-Screenshot) to provide context to the AI.
+- **Universal Linux Support:** The installer handles dependencies seamlessly across Arch, Debian/Ubuntu, Fedora, and openSUSE.
+- **Flexible LLM Integration:** Connect to local models (e.g., LM Studio, Ollama), remote APIs (e.g., Groq, OpenAI), or CLI-based AI tools.
+- **Bilingual Interface:** Supports both English and Turkish application languages out of the box.
+
+## Screenshots
+
+### Main Interface
+
+When triggered via your custom global hotkey, the minimal listening overlay appears. It provides visual waveform feedback for your voice and auto-closes when the interaction is finished.
+
+![Listening Overlay](screenshots/listining.png)
+
+![Waiting for AI](screenshots/waiting%20for%20AI%20Response.png)
+
+### Configuration & Settings
+
+Linux AI System Bridge is highly customizable, putting the control entirely in your hands.
+
+**General Settings**  
+Configure your global hotkey and choose the application language.  
+![General Settings](screenshots/general%20settings.png)
+
+**Listening & Overlay Settings**  
+Fine-tune microphone sensitivity, pause detection thresholds, and the physical position of the overlay.  
+![Listening Settings](screenshots/Listening%20settings.png)
+
+**AI & API Configuration**  
+Easily switch between local AI instances, remote APIs, and command-line LLM tools.  
+![AI Settings](screenshots/AI%20Settings.png)
+
+**Security & Advanced Settings**  
+Control the permissions of the AI. Enable or disable automatic popup responses, dictation optimization, and automatic context passing (screen/clipboard reading).  
+![Security Settings](screenshots/security%20setting.png)
+
+## Installation
+
+The project includes an intelligent installer script that automatically detects your Linux distribution and installs the required system packages, sets up a secure Python virtual environment (venv), and creates desktop/autostart shortcuts.
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/Linux-AI-System-Bridge.git
+   cd Linux-AI-System-Bridge
+   ```
+
+2. Make the installer executable and run it:
+   ```bash
+   chmod +x install.sh
+   ./install.sh
+   ```
+
+3. Launch the application:
+   You can find **AI-Dikte** (or AI-Bridge) in your application launcher, or start it directly from the terminal:
+   ```bash
+   ./venv/bin/python gui_main.py
+   ```
+
+## Requirements & Dependencies
+
+The `install.sh` script installs these automatically depending on your distribution (pacman, apt, dnf, or zypper):
+- Python 3.10+
+- `portaudio` (for PyAudio)
+- `tesseract` & `tesseract-ocr` language packs (for screen context reading)
+- A screenshot utility (`grim` for Wayland, `spectacle` for KDE, or `gnome-screenshot` for GNOME/GTK)
+- XCB libraries (for PyQt6 compatibility)
+
+## Security & Privacy
+
+- **API Keys are local:** All settings and API keys are stored locally in a `settings.json` file. This file is intentionally ignored in `.gitignore` to prevent accidental uploads.
+- **You are in control:** The system prompt is fully exposed in the settings, allowing you to explicitly define how the AI behaves and what rules it follows.
+- **Permission checks:** Automatic clipboard and screen reading can be toggled off in the Security tab if you prefer the application to explicitly ask for permission every time.
+
+## Contributing
+
+Contributions, issues, and feature requests are welcome. Feel free to check the issues page.
+
+## License
+
+Distributed under the MIT License.
