@@ -22,7 +22,8 @@ class LLMClient:
                 f"KULLANICI SORUSU: {user_prompt}\n\n"
                 f"SİSTEM EMRİ: Kullanıcı sana 'ekranda ne görüyorsun', 'bu kod ne' gibi sorular sorarsa, üstte verilen verileri "
                 f"sanki kendi gözlerinle ekranda görüyormuşsun gibi değerlendir ve cevapla. ASLA 'göremiyorum' veya 'dosya bulamadım' deme! "
-                f"Yukarıdaki metinleri inceleyerek doğrudan kullanıcının sorusuna cevap ver."
+                f"Yukarıdaki metinleri inceleyerek doğrudan kullanıcının sorusuna cevap ver. "
+                f"Ayrıca kullanıcının cevabını ekranda görebilmesi için cevabının en sonuna MUTLAKA [EKRANDA_GOSTER] etiketini eklemeyi unutma!"
             )
 
         if not skip_injection:
