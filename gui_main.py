@@ -51,6 +51,7 @@ from audio_listener import AudioListener
 from router import Router
 from llm_client import LLMClient
 from cli_tools_registry import KNOWN_CLI_TOOLS
+from context_helper import get_active_contexts
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -126,6 +127,8 @@ class Communicate(QObject):
     ask_show_response = pyqtSignal(object, object) # result_list, threading.Event
     ask_clipboard     = pyqtSignal(object, object, str) # result_list, threading.Event, text
     show_response     = pyqtSignal(str) # text
+    show_context_btns = pyqtSignal(object) # list of dicts
+    hide_context_btns = pyqtSignal()
 
 # ──────────────────────────────────────────────────────────
 #  Kısayol Yakalayıcı (KDE-style)
@@ -275,6 +278,7 @@ class WaveformWidget(QWidget):
 # ──────────────────────────────────────────────────────────
 class OverlayWindow(QWidget):
     stop_clicked = pyqtSignal()
+    context_added = pyqtSignal(str, str) # title, url
 
     def __init__(self, settings, waveform):
         super().__init__()
@@ -297,40 +301,60 @@ class OverlayWindow(QWidget):
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(10) # Aradaki boşluk
+
+        # Context Buttons Container (Separate from main bubble)
+        self.context_btns_container = QWidget()
+        self.context_btns_layout = QVBoxLayout(self.context_btns_container)
+        self.context_btns_layout.setContentsMargins(0, 0, 0, 0) # Hizalama düzeltildi
+        self.context_btns_layout.setSpacing(6)
+        
+        outer.addWidget(self.context_btns_container)
+        self.context_btns_container.hide()
+
+        # --- Main Bubble ---
         container = QWidget(self)
         container.setObjectName("oc")
         container.setStyleSheet("""
             #oc {
                 background: rgba(16, 16, 20, 235);
-                border-radius: 14px;
-                border: 1px solid rgba(255,255,255,25);
+                border-radius: 16px;
+                border: 1px solid rgba(255,255,255,30);
             }
         """)
-        container.setFixedWidth(250)
+        container.setFixedWidth(260)
         container.setMinimumHeight(60)
         
         inner = QVBoxLayout(container)
-        inner.setContentsMargins(18, 12, 18, 12)
-        inner.setSpacing(6)
+        inner.setContentsMargins(16, 16, 16, 16)
+        inner.setSpacing(8)
 
+        # Status Label
         self.label = QLabel(tr("Dinleniyor..."))
-        self.label.setStyleSheet("color: rgba(255,255,255,190); font-size: 13px; background: transparent;")
+        self.label.setStyleSheet("color: rgba(255,255,255,200); font-size: 13px; background: transparent; border: none; font-weight: 500;")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setFont(QFont("Sans Serif", 11))
-        self.label.setWordWrap(True) # Uzun metinlerde alt satıra geçsin
-        self.label.setFixedSize(214, 32) # Metin değişince kutu büyümesin diye sabit boyut
-
-        self.waveform.setStyleSheet("background: transparent;")
+        self.label.setWordWrap(True)
+        
+        # Waveform
+        self.waveform.setStyleSheet("background: transparent; border: none;")
+        self.waveform.setFixedHeight(32)
+        
         inner.addWidget(self.label)
         inner.addWidget(self.waveform)
 
+        # Stop Button
         self.stop_btn = QPushButton("Sustur")
         self.stop_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(220, 50, 50, 200);
                 color: white;
-                border-radius: 4px;
-                padding: 4px;
+                border-radius: 8px;
+                padding: 6px;
+                font-weight: bold;
+                border: none;
             }
             QPushButton:hover { background-color: rgba(255, 70, 70, 255); }
         """)
@@ -338,12 +362,10 @@ class OverlayWindow(QWidget):
         self.stop_btn.hide()
         inner.addWidget(self.stop_btn)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(container)
         
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(450) # Barın aşırı uzamasını engelle
+        self.setMinimumWidth(260)
+        self.setMaximumWidth(450)
         self.resize(260, 100)
 
     def reposition(self):
@@ -386,6 +408,58 @@ class OverlayWindow(QWidget):
             self.stop_btn.show()
         else:
             self.stop_btn.hide()
+        self.adjustSize()
+        self.reposition()
+
+    def show_context_btns(self, contexts):
+        # Clear existing
+        while self.context_btns_layout.count():
+            child = self.context_btns_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+                
+        if not contexts:
+            self.context_btns_container.hide()
+            self.adjustSize()
+            self.reposition()
+            return
+            
+        for ctx in contexts:
+            btn = QPushButton(f"{ctx['icon']} {ctx['label']} Ekle")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(20, 20, 25, 180);
+                    color: white;
+                    border-radius: 12px;
+                    padding: 8px 14px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    text-align: left;
+                    border: 1px solid rgba(255,255,255,30);
+                }
+                QPushButton:hover { 
+                    background-color: rgba(50, 50, 60, 220); 
+                    border: 1px solid rgba(255,255,255,60);
+                }
+            """)
+
+            # Use closure to capture ctx
+            def make_callback(context_data, button):
+                def callback():
+                    button.setText(f"{context_data['icon']} Eklendi ✓")
+                    button.setEnabled(False)
+                    self.context_added.emit(context_data['title'], context_data['detail'] or "")
+                return callback
+                
+            btn.clicked.connect(make_callback(ctx, btn))
+            self.context_btns_layout.addWidget(btn)
+            
+        self.context_btns_container.show()
+        self.adjustSize()
+        self.reposition()
+        
+    def hide_context_btns(self):
+        self.context_btns_container.hide()
         self.adjustSize()
         self.reposition()
 
@@ -695,6 +769,27 @@ class SettingsWindow(QWidget):
 
         tabs.addTab(tab_sec, tr("Güvenlik"))
 
+        # ── Sekme: Tarayıcı Eklentisi ──
+        tab_ext = QWidget()
+        ext_layout = QVBoxLayout(tab_ext)
+        ext_info = QLabel(
+            "<b>Linux AI Asistan - Tarayıcı Eklentisi Kurulumu</b><br><br>"
+            "Eklenti sayesinde Gmail, YouTube, PDF'ler ve tüm web sayfalarını asistanınızla entegre edebilirsiniz.<br><br>"
+            "<b>Nasıl Kurulur?</b><br>"
+            "1. Chrome, Brave veya Edge tarayıcınızda <code>chrome://extensions/</code> (veya edge://extensions/) sayfasına gidin.<br>"
+            "2. Sağ üst köşeden <b>'Geliştirici Modu'</b> (Developer mode) seçeneğini aktifleştirin.<br>"
+            "3. Sol üstteki <b>'Paketlenmemiş öge yükle'</b> (Load unpacked) butonuna tıklayın.<br>"
+            "4. Açılan pencerede uygulamanın bulunduğu dosya konumundaki <code>browser_extension</code> klasörünü seçin.<br><br>"
+            "İşte bu kadar! Eklentiyi uzantılar menüsünden sabitleyip hemen kullanmaya başlayabilirsiniz."
+        )
+        ext_info.setTextFormat(Qt.TextFormat.RichText)
+        ext_info.setStyleSheet("font-size: 13px; line-height: 1.5;")
+        ext_info.setWordWrap(True)
+        ext_info.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        ext_layout.addWidget(ext_info)
+        
+        tabs.addTab(tab_ext, tr("Tarayıcı"))
+
         # ── Alt butonlar ──────────────────────────────────
         btn_row = QHBoxLayout()
         btn_cancel = QPushButton(tr("İptal"))
@@ -815,17 +910,71 @@ class AppManager:
         self.comm.ask_show_response.connect(self._ask_show_response_gui, Q)
         self.comm.ask_clipboard.connect(self._ask_clipboard_gui, Q)
         self.comm.show_response.connect(self._show_response_gui, Q)
-
         self.waveform     = WaveformWidget(self.settings)
         self.overlay      = OverlayWindow(self.settings, self.waveform)
+        
+        self.comm.show_context_btns.connect(lambda contexts: self.overlay.show_context_btns(contexts), Q)
+        self.comm.hide_context_btns.connect(self.overlay.hide_context_btns, Q)
+        
         self.overlay.stop_clicked.connect(self.on_hotkey_triggered)
+        self.overlay.context_added.connect(self._on_context_added)
 
         self.hotkey = HotkeyManager(self.settings.get("hotkey"), self.on_hotkey_triggered)
         self.settings_win = SettingsWindow(self.settings, self.hotkey)
         self.hotkey.start()
-
+        
+        # Extension Server Başlat (Tarayıcı eklentisinden veri almak için)
+        try:
+            from extension_server import start_server, signals as ext_signals
+            self.ext_server = start_server()
+            ext_signals.data_received.connect(self._on_extension_data, Q)
+        except Exception as e:
+            logger.error(f"Extension server başlatılamadı: {e}")
+        
         self._setup_tray()
         self._is_listening = False
+
+    def _on_extension_data(self, data):
+        """Tarayıcı eklentisinden veri geldiğinde tetiklenir."""
+        logger.info(f"Extension'dan veri geldi: {data.get('url')}")
+        
+        ctx = {
+            "title": data.get("title", ""),
+            "url": data.get("url", ""),
+            "type": "extension",
+            "content": data.get("content", ""),
+            "selection": data.get("selection", ""),
+            "contentType": data.get("contentType", "")
+        }
+        
+        # Eğer henüz dinlenmiyorsa, ÖNCE uyandır (çünkü uyanma anında liste sıfırlanıyor)
+        if not getattr(self, '_is_listening', False):
+            self.on_hotkey_triggered()
+            
+        if not hasattr(self, '_context_queue'):
+            self._context_queue = []
+            
+        self._context_queue.append(ctx)
+            
+        # Zaten dinleniyorsa veya yeni uyandıysa bilgilendirme geç
+        if getattr(self, '_is_listening', False):
+            if data.get('selection'):
+                self.comm.update_text.emit("Seçili metin eklendi")
+            elif "youtube.com/watch" in data.get('url', '') or "youtu.be/" in data.get('url', ''):
+                self.comm.update_text.emit("Video eklendi")
+            elif data.get('url', '').lower().endswith('.pdf') or data.get('contentType') == 'application/pdf':
+                self.comm.update_text.emit("PDF belgesi eklendi")
+            elif "mail.google.com" in data.get('url', ''):
+                self.comm.update_text.emit("E-posta eklendi")
+            else:
+                self.comm.update_text.emit("Tarayıcı sekmesi eklendi")
+            
+            def _reset_text():
+                if getattr(self, '_is_listening', False):
+                    self.comm.update_text.emit("Seni dinliyorum...")
+                    
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(5000, _reset_text)
 
     def _setup_tray(self):
         pix = QPixmap(64, 64)
@@ -920,15 +1069,26 @@ class AppManager:
             return
         
         self._is_listening = True
+        self._context_queue = [] # reset context queue
         
         # Sadece overlayi göster, KDE tepsisinden bildirim atıp kalp atışını tetikleme
         self.comm.show_overlay.emit()
+        self.comm.hide_context_btns.emit()
         self.comm.start_waveform.emit()
         # Panoyu ana thread üzerinde okuyoruz (QClipboard thread-safe değildir, çökme yapabilir)
         import PyQt6.QtGui as QtGui
         current_clip = QtGui.QGuiApplication.clipboard().text().strip()
 
+        threading.Thread(target=self._check_context_bg, daemon=True).start()
         threading.Thread(target=self._process, args=(current_clip,), daemon=True).start()
+
+    def _check_context_bg(self):
+        contexts = get_active_contexts()
+        if contexts:
+            self.comm.show_context_btns.emit(contexts)
+
+    def _on_context_added(self, title, url):
+        self._context_queue.append({"title": title, "url": url})
 
     def _process(self, current_clipboard_text):
         try:
@@ -974,7 +1134,14 @@ class AppManager:
             # --- BAĞLAM FARKINDALIĞI (PANO VE EKRAN) ---
             context = None
             lower_text = text.lower()
-            context_keywords = ["pano", "kopyala", "bunu", "şunu", "bu ", "buradaki", "ekran"]
+            has_attachments = bool(getattr(self, '_context_queue', None))
+            
+            # Eğer halihazırda ek (browser extension verisi) gönderilmişse, sadece "ekran" ve "pano" gibi kelimeleri dikkate al.
+            # Yoksa "bu maile", "şunu oku" gibi şeyler sürekli ekran okuma pop-up'ı çıkarır.
+            if has_attachments:
+                context_keywords = ["pano", "kopyala", "ekran"]
+            else:
+                context_keywords = ["pano", "kopyala", "bunu", "şunu", "bu ", "buradaki", "ekran"]
             
             if any(kw in lower_text for kw in context_keywords):
                 import subprocess
@@ -1035,6 +1202,89 @@ class AppManager:
                     
                     context = combined_context.strip()
 
+            if getattr(self, '_context_queue', None):
+                yt_context = "[Kullanıcının Seçtiği Ek Bağlamlar (Ekler)]:\n"
+                for yt in self._context_queue:
+                    url_str = yt['url'] if yt['url'] else "(Bağlantı bulunamadı, bu başlığı / içeriği referans alabilirsiniz)"
+                    yt_context += f"Başlık/İçerik: {yt['title']}\nDetay/URL: {url_str}\n"
+                    
+                    if yt['url'] and ("youtube.com/watch" in yt['url'] or "youtu.be/" in yt['url']):
+                        try:
+                            from youtube_transcript_api import YouTubeTranscriptApi
+                            import urllib.parse as urlparse
+                            
+                            self.comm.update_text.emit("Video Altyazısı Okunuyor...")
+                            
+                            video_id = None
+                            if "youtu.be/" in yt['url']:
+                                video_id = yt['url'].split("youtu.be/")[1].split("?")[0]
+                            else:
+                                parsed = urlparse.urlparse(yt['url'])
+                                video_id = urlparse.parse_qs(parsed.query).get('v', [None])[0]
+                                
+                            if video_id:
+                                ytt_api = YouTubeTranscriptApi()
+                                t_list = ytt_api.list(video_id)
+                                t_obj = None
+                                try:
+                                    t_obj = t_list.find_transcript(['tr', 'en'])
+                                except:
+                                    try:
+                                        t_obj = t_list.find_generated_transcript(['tr', 'en'])
+                                    except:
+                                        t_obj = next(iter(t_list))
+                                
+                                if t_obj:
+                                    transcript = t_obj.fetch()
+                                    text_lines = [t.text for t in transcript]
+                                    full_text = " ".join(text_lines)
+                                    if len(full_text) > 25000:
+                                        full_text = full_text[:25000] + "... (Videonun tamamı çok uzun olduğu için kesildi)"
+                                    yt_context += f"\n[VİDEONUN TAM İÇERİĞİ / ALTYAZISI]:\n{full_text}\n"
+                        except Exception as e:
+                            logger.error(f"YouTube altyazı çekilemedi: {e}")
+                            
+                    elif yt.get('type') == 'extension':
+                        # Tarayıcı eklentisinden gelen verileri işle
+                        if yt.get('selection'):
+                            yt_context += f"\n[TARAYICIDA SEÇİLEN METİN]:\n{yt['selection']}\n"
+                        
+                        is_yt = yt['url'] and ("youtube.com/watch" in yt['url'] or "youtu.be/" in yt['url'])
+                        is_pdf = yt['url'] and (yt['url'].lower().endswith('.pdf') or yt.get('contentType') == 'application/pdf')
+                        
+                        if is_pdf:
+                            self.comm.update_text.emit("PDF İçeriği Okunuyor...")
+                            try:
+                                pdf_path = None
+                                import urllib.parse
+                                if yt['url'].startswith('file://'):
+                                    pdf_path = urllib.parse.unquote(yt['url'].replace('file://', ''))
+                                else:
+                                    import requests, tempfile
+                                    r = requests.get(yt['url'], stream=True, timeout=10)
+                                    if r.status_code == 200:
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as f:
+                                            for chunk in r.iter_content(chunk_size=8192):
+                                                f.write(chunk)
+                                            pdf_path = f.name
+                                if pdf_path:
+                                    import subprocess
+                                    out = subprocess.run(['pdftotext', '-layout', pdf_path, '-'], capture_output=True, text=True)
+                                    pdf_text = out.stdout.strip()
+                                    if len(pdf_text) > 30000:
+                                        pdf_text = pdf_text[:30000] + "\n... (PDF çok uzun olduğu için kesildi)"
+                                    yt_context += f"\n[PDF BELGESİ İÇERİĞİ]:\n{pdf_text}\n"
+                            except Exception as e:
+                                logger.error(f"PDF Okuma hatası: {e}")
+                                
+                        elif yt.get('content') and not is_yt:
+                            content = yt['content']
+                            if len(content) > 30000:
+                                content = content[:30000] + "\n... (Sayfa çok uzun olduğu için kesildi)"
+                            yt_context += f"\n[TARAYICIDAKİ SAYFANIN TAM METNİ]:\n{content}\n"
+                            
+                context = (context + "\n\n" + yt_context) if context else yt_context
+
             self.comm.update_text.emit(tr("Yapay Zekanın Cevabı Bekleniyor..."))
 
             # --- LLM / YÖNLENDİRME ---
@@ -1045,6 +1295,24 @@ class AppManager:
             
             wants_popup = False
             import re
+            
+            # --- BROWSER ACTION PARSING ---
+            browser_action_match = re.search(r'\[BROWSER_ACTION:\s*({.*?})\]', response, re.DOTALL)
+            if browser_action_match:
+                try:
+                    import json
+                    action_json_str = browser_action_match.group(1)
+                    action_data = json.loads(action_json_str)
+                    
+                    if hasattr(self, 'ext_server') and hasattr(self.ext_server, 'send_browser_command'):
+                        self.ext_server.send_browser_command(action_data)
+                        logger.info(f"Tarayıcı komutu gönderildi: {action_data}")
+                    
+                    # Remove the tag from response
+                    response = re.sub(r'\[BROWSER_ACTION:\s*({.*?})\]', '', response, flags=re.DOTALL).strip()
+                except Exception as e:
+                    logger.error(f"Browser action JSON parse hatası: {e}")
+
             # Daha esnek bir kontrol (büyük/küçük harf, alt tire veya boşluk, türkçe karakter vs.)
             if re.search(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', response, re.IGNORECASE):
                 wants_popup = True

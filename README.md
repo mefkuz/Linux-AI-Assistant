@@ -7,10 +7,28 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 ## Key Features
 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
+- **Browser Extension Integration (NEW!):** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and even lets you voice-control the browser (scroll, close tabs, auto-fill forms).
 - **Context Awareness:** Can instantly read your clipboard and perform OCR on your screen (using native Linux tools like Grim, Spectacle, or Gnome-Screenshot) to provide context to the AI.
 - **Universal Linux Support:** The installer handles dependencies seamlessly across Arch, Debian/Ubuntu, Fedora, and openSUSE.
 - **Flexible LLM Integration:** Connect to local models (e.g., LM Studio, Ollama), remote APIs (e.g., Groq, OpenAI), or CLI-based AI tools.
 - **Bilingual Interface:** Supports both English and Turkish application languages out of the box.
+
+## Browser Extension Integration
+
+The newly added **Manifest V3 Browser Extension** (compatible with Chrome, Brave, and Edge) takes the AI's context awareness to the next level. 
+
+**Key Capabilities:**
+- **Smart Data Extraction:** Instantly extracts and sends the full text of Wikipedia articles, local/web PDFs, and Gmail threads directly to the AI.
+- **YouTube Transcripts:** When triggered on a YouTube video, the AI automatically fetches and reads the video's exact transcript instead of just the page text!
+- **Voice-Controlled Browser:** Give voice commands like "Close this tab" or "Scroll down," and the AI will physically control your browser tab.
+- **Form & Email Auto-Fill:** Say "Reply to this email with a polite rejection," and the AI will draft the response and **automatically inject it directly into your Gmail compose box** or any active web form.
+
+**Installation:**
+1. Navigate to `chrome://extensions/` (or `edge://extensions/`) in your browser.
+2. Enable **Developer mode** in the top right.
+3. Click **Load unpacked** in the top left.
+4. Select the `browser_extension` folder located inside this repository.
+5. Pin the microphone icon to your toolbar!
 
 ## Screenshots
 
