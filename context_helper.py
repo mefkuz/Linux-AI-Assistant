@@ -51,7 +51,7 @@ def get_active_contexts():
                         contexts.append({"type": "media", "icon": "▶", "label": "YouTube Videosunu", "title": title or "YouTube Video", "detail": url})
                     elif is_spotify:
                         disp = f"{artist} - {title}" if artist and title else (title or "Spotify Şarkısı")
-                        contexts.append({"type": "media", "icon": "🎵", "label": "Çalan Şarkıyı", "title": disp, "detail": url})
+                        contexts.append({"type": "media", "icon": "♪", "label": "Çalan Şarkıyı", "title": disp, "detail": url})
     except Exception:
         pass
 
