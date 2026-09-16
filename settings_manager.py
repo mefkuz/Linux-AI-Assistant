@@ -40,6 +40,14 @@ DEFAULT_SETTINGS = {
     "require_confirm_on_write": True,
     "allow_sudo": False,
 
+    # Araç Çağırma (Tool Calling)
+    "enable_tool_calling": True,      # Master switch (remote/local modlarında geçerli)
+    "require_confirm_on_tool": False, # Her araç çalıştırmadan önce onay iste
+    "tool_max_iterations": 5,         # Agentic döngü üst sınırı
+
+    # Konuşma geçmişi (hafıza)
+    "history_max_turns": 6,           # Tutulacak diyalog turu (0 = hafıza kapalı)
+
     # Kişiselleştirme
     "auto_show_popup": False,
     "optimize_dictation": False,
@@ -52,7 +60,7 @@ DEFAULT_SETTINGS = {
         "ZORUNLU KURAL: Eğer kullanıcı senden bir bilgi isterse veya sohbet ederse (örneğin 'İstanbul ne zaman fethedildi?', 'Bana şunu anlat'), mutlaka cevabının EN SONUNA aynen şu metni ekle: [EKRANDA_GOSTER] "
         "ANCAK, eğer kullanıcı senden arka planda bir işlem yapmanı (dosya oluştur/sil vs.) isterse veya cevabın teknik bir komut/kod bloğu içeriyorsa, [EKRANDA_GOSTER] etiketini KULLANMA.\n\n"
         "Aynı Zamanda her istek için Loglar klasörünün içine (yoksa bir tane oluştur) bir tane TARİH-İSTEK-log.md şeklinde bir dosya oluştur. bu dosyanın içinde neler yaptığını olabildiğince sade bir şekilde açıkla. bu log kaydını oluşturduğunu kullanıcıya söyleme (burdaki amaç, kullanıcının gereksiz bilgilerle ekstra meşgul olmasını engellemek, zaten isterse klasöre girip görebilir.)\n\n"
-        "Kullanıcı ile sadece bir kere konuşabileceğini, hafızan olmadığını unutma. yani ona \"istersen yardım edebilirim\" gibi cevaplar vermketense net cevaplar vermeye çalış\n\n"
+        "Önceki konuşmaları hatırlıyorsun; kullanıcı 'az önce', 'bunu ona ekle' gibi göndermeler yaparsa geçmişe bakarak devam et. \"istersen yardım edebilirim\" gibi boş giriş cümleleri yerine net cevaplar ver.\n\n"
         "eğer log oluşturma derse log kaydı oluşturma ve oluşturmadığını kullanıcıya belirt\n\n"
         "TARİH: o günün tarihi\n"
         "İSTEK: kullanıcının senden istediği şey"

@@ -37,19 +37,52 @@ class SecurityManager:
                 return True
         return False
 
-    def ask_confirmation(self, command_str):
+    def ask_confirmation(self, summary, explanation=""):
         """
-        GUI callback varsa onu kullanır (popup), yoksa terminal prompt.
+        Kullanıcıdan onay ister.
+
+        summary: dict veya str.
+          dict: {"title": str,         # Pencere başlığı ("Ekran okunsun mu?")
+                 "question": str,      # Tek cümlelik soru
+                 "detail": str | None} # Komut/dosya yolu gibi detay (küçük puntoyla)
+          str: eski tarz ham komut metni (otomatik sade özete çevrilir).
+
+        explanation: eski imzayla uyumluluk için tutulur.
+        Döner: True (onay) / False (red).
         """
+        if isinstance(summary, str):
+            summary = {
+                "title": "Komut çalıştırılsın mı?",
+                "question": "Şu komut çalıştırılacak:",
+                "detail": summary if summary else (explanation or None),
+            }
+
+        title = summary.get("title") or "Onay"
+        question = summary.get("question") or ""
+        detail = summary.get("detail")
+
         if self.confirm_callback:
-            return self.confirm_callback(command_str)
-        # Fallback: terminal
+            import inspect
+            try:
+                params = inspect.signature(self.confirm_callback).parameters
+                takes_two = len(params) >= 2
+            except (TypeError, ValueError):
+                takes_two = False
+            if takes_two:
+                # Eski tarz iki-argümanlı callback: (question, detail)
+                return self.confirm_callback(question, detail or "")
+            return self.confirm_callback(summary)
+
+        # Fallback: terminal (remember burada desteklenmez, her seferinde sorulur)
         while True:
             try:
-                resp = input(
-                    f"\n[GÜVENLİK] Kritik komut: '{command_str}'\n"
-                    "Onaylıyor musunuz? (y/n): "
-                ).strip().lower()
+                prompt = f"\n[GÜVENLİK] {title}\n"
+                if question:
+                    prompt += f"{question}\n"
+                if detail:
+                    prompt += f"Detay: {detail}\n"
+                prompt += "Onaylıyor musunuz? (y/n): "
+                resp = input(prompt).strip().lower()
                 if resp in ('y', 'yes'):
                     return True
                 if resp in ('n', 'no'):

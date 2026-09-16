@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QMessageBox,
     QTabWidget, QSpinBox, QCheckBox, QFormLayout, QSizePolicy,
     QListWidget, QListWidgetItem, QAbstractItemView, QStackedWidget,
-    QFileDialog, QTextEdit
+    QFileDialog, QTextEdit, QDialog, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap, QPen, QKeyEvent, QKeySequence
@@ -123,7 +123,7 @@ class Communicate(QObject):
     update_text    = pyqtSignal(str)
     start_waveform = pyqtSignal()
     stop_waveform  = pyqtSignal()
-    ask_confirm       = pyqtSignal(str, str, object, object) # cmd_str, explanation, result_list, threading.Event
+    ask_confirm       = pyqtSignal(object, object, object) # summary_dict, result_list, threading.Event
     ask_show_response = pyqtSignal(object, object) # result_list, threading.Event
     ask_clipboard     = pyqtSignal(object, object, str) # result_list, threading.Event, text
     show_response     = pyqtSignal(str) # text
@@ -471,7 +471,42 @@ class OverlayWindow(QWidget):
 # ──────────────────────────────────────────────────────────
 #  Yapay Zeka Yanıt Penceresi (Özel QDialog)
 # ──────────────────────────────────────────────────────────
-from PyQt6.QtWidgets import QDialog, QTextBrowser
+from PyQt6.QtWidgets import QTextBrowser
+
+
+class ConfirmDialog(QDialog):
+    """Sade onay penceresi: başlık + tek soru + küçük gri detay (kayan)."""
+
+    def __init__(self, title, question, detail=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        q_lbl = QLabel(question)
+        q_lbl.setWordWrap(True)
+        layout.addWidget(q_lbl)
+
+        if detail:
+            d_lbl = QLabel(detail)
+            d_lbl.setWordWrap(True)
+            d_lbl.setStyleSheet("color: #888; font-size: 11px;")
+            # Uzun detaylar pencereyi şişirmesin: metin kayar
+            d_lbl.setMaximumHeight(120)
+            layout.addWidget(d_lbl)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Yes).setText("Evet")
+        buttons.button(QDialogButtonBox.StandardButton.No).setText("Hayır")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
 class ResponseWindow(QDialog):
     def __init__(self, text, parent=None):
@@ -738,34 +773,73 @@ class SettingsWindow(QWidget):
 
         # ── SEKME 5: Güvenlik & Ekstra Ayarlar ─────────────────────────────
         tab_sec = QWidget()
-        sl = QFormLayout(tab_sec)
-        sl.setSpacing(12); sl.setContentsMargins(16, 16, 16, 16)
+        sl = QVBoxLayout(tab_sec)
+        sl.setSpacing(4); sl.setContentsMargins(16, 16, 16, 16)
 
-        self.popup_check = QCheckBox(tr("Yapay Zeka yanıtlarını bana sormadan (otomatik) ekranda göstersin"))
-        self.popup_check.setChecked(self.settings.get("auto_show_popup", False))
-        sl.addRow(self.popup_check)
-        
-        info = QLabel("Eğer işaretlenirse, ekrana 'Cevabı görmek istiyor musun?' sorusu çıkmaz, direkt Pop-up açılır.")
-        info.setStyleSheet("color: #aaa; font-size: 11px;")
-        sl.addRow(info)
-        
-        self.opt_check = QCheckBox(tr("Akıllı Dikte Düzeltici (Yapay Zeka ile İyileştirme)"))
-        self.opt_check.setChecked(self.settings.get("optimize_dictation", False))
-        sl.addRow(self.opt_check)
-        
-        opt_info = QLabel("Diktedeki duraksama veya hataları (ııı, eee, şey vs.) algılayarak asıl yapay zekaya en temiz komutu/soruyu iletmek üzere arka planda ön-işlemden geçirir.\nUYARI: Bu işlem yanıt süresini uzatır ve API kotanızı (token kullanımını) 2 katına çıkarır.")
-        opt_info.setStyleSheet("color: #eb7a34; font-size: 11px;")
-        opt_info.setWordWrap(True)
-        sl.addRow(opt_info)
+        def _section(title):
+            lbl = QLabel(f"<b>{title}</b>")
+            lbl.setStyleSheet("color: #ddd; font-size: 13px; margin-top: 6px;")
+            sl.addWidget(lbl)
 
-        self.clip_check = QCheckBox(tr("Bağlam Farkındalığı (Pano ve Ekran Okumaya Her Zaman İzin Ver)"))
-        self.clip_check.setChecked(self.settings.get("auto_allow_clipboard", False))
-        sl.addRow(self.clip_check)
+        def _check(text, tip, key, default=False):
+            cb = QCheckBox(text)
+            cb.setChecked(self.settings.get(key, default))
+            cb.setToolTip(tip)
+            sl.addWidget(cb)
+            return cb
 
-        clip_info = QLabel("İşaretlendiğinde; cümlenizde 'bunu', 'şunu', 'pano' veya 'ekran' kelimeleri geçtiğinde panonuzdaki metin veya ekran görüntünüz (OCR) doğrudan yapay zekaya iletilir, onay sormaz.")
-        clip_info.setStyleSheet("color: #aaa; font-size: 11px;")
-        clip_info.setWordWrap(True)
-        sl.addRow(clip_info)
+        _section("Yanıtlar")
+        self.popup_check = _check(
+            "Yanıtları sormadan otomatik göster",
+            "Kapalıysa 'Cevabı görmek istiyor musun?' diye sorulur.",
+            "auto_show_popup")
+        self.opt_check = _check(
+            "Akıllı Dikte Düzeltici",
+            "Diktedeki duraksama/hataları (ııı, eee, şey) LLM ile temizler.\n"
+            "UYARI: Yanıt süresini uzatır, token kullanımını ~2 katına çıkarır.",
+            "optimize_dictation")
+
+        _section("Okuma İzinleri")
+        self.clip_check = _check(
+            "Ekran ve pano okumaya her zaman izin ver",
+            "Kapalıysa yapay zeka okumadan önce her seferinde sorar.\n"
+            "Terminal modunda 'bunu/şunu/ekran' denince, Araç Çağırma aktifken\n"
+            "okuma yapılmadan hemen önce sorulur.",
+            "auto_allow_clipboard")
+
+        _section("Araç Çağırma (Uzak/Yerel API)")
+        self.tool_enable_check = _check(
+            "Araç Çağırma aktif",
+            "Yapay zeka dosya/komut/ekran/pano/tarayıcı araçlarını kullanabilir.\n"
+            "Aktifken eski keyword tabanlı pano/ekran enjeksiyonu devre dışı kalır.\n"
+            "Terminal (CLI) modunda etkisizdir.",
+            "enable_tool_calling", True)
+        self.tool_confirm_check = _check(
+            "Dosya yazma ve komut çalıştırmadan önce sor",
+            "Kapalı olsa bile tehlikeli komutlar (rm, sudo vb.) her zaman sorulur.",
+            "require_confirm_on_tool")
+
+        iter_row = QHBoxLayout()
+        iter_row.addWidget(QLabel("Maks. araç turu:"))
+        self.tool_iter_spin = QSpinBox()
+        self.tool_iter_spin.setRange(1, 10)
+        self.tool_iter_spin.setValue(self.settings.get("tool_max_iterations", 5))
+        self.tool_iter_spin.setToolTip("Üst üste kaç tur araç çağrılabilir (sonsuz döngü koruması).")
+        iter_row.addWidget(self.tool_iter_spin)
+        iter_row.addStretch()
+        sl.addLayout(iter_row)
+
+        _section("Hafıza")
+        hist_row = QHBoxLayout()
+        hist_row.addWidget(QLabel("Hatırlanacak konuşma turu:"))
+        self.hist_spin = QSpinBox()
+        self.hist_spin.setRange(0, 20)
+        self.hist_spin.setValue(self.settings.get("history_max_turns", 6))
+        self.hist_spin.setToolTip("Son kaç soru-cevap turu modele gönderilir.\n0 = hafıza kapalı.")
+        hist_row.addWidget(self.hist_spin)
+        hist_row.addStretch()
+        sl.addLayout(hist_row)
+        sl.addStretch()
 
         tabs.addTab(tab_sec, tr("Güvenlik"))
 
@@ -864,6 +938,10 @@ class SettingsWindow(QWidget):
         s.set("auto_show_popup",          self.popup_check.isChecked())
         s.set("optimize_dictation",       self.opt_check.isChecked())
         s.set("auto_allow_clipboard",     self.clip_check.isChecked())
+        s.set("enable_tool_calling",      self.tool_enable_check.isChecked())
+        s.set("require_confirm_on_tool",  self.tool_confirm_check.isChecked())
+        s.set("tool_max_iterations",      self.tool_iter_spin.value())
+        s.set("history_max_turns",        self.hist_spin.value())
 
         if self.hotkey_manager:
             self.hotkey_manager.update_hotkey(s.get("hotkey"))
@@ -928,6 +1006,9 @@ class AppManager:
             from extension_server import start_server, signals as ext_signals
             self.ext_server = start_server()
             ext_signals.data_received.connect(self._on_extension_data, Q)
+            # browser_action tool'u için göndericiyi Router → LLMClient zincirine enjekte et
+            if hasattr(self.ext_server, 'send_browser_command'):
+                self.router.set_browser_sender(self.ext_server.send_browser_command)
         except Exception as e:
             logger.error(f"Extension server başlatılamadı: {e}")
         
@@ -1008,11 +1089,21 @@ class AppManager:
         act_s.triggered.connect(lambda: (self.settings_win.show(), self.settings_win.raise_()))
         menu.addAction(act_s)
         menu.addSeparator()
+        act_h = QAction("Hafızayı Temizle", self.app)
+        act_h.setToolTip("Yapay zekanın hatırladığı konuşma geçmişini siler.")
+        act_h.triggered.connect(self._clear_history)
+        menu.addAction(act_h)
+        menu.addSeparator()
         act_q = QAction(tr("Çıkış"), self.app)
         act_q.triggered.connect(self._quit)
         menu.addAction(act_q)
         self.tray.setContextMenu(menu)
         self.tray.show()
+
+    def _clear_history(self):
+        self.router.llm.clear_history()
+        self.tray.showMessage("Linux-AI-Assistant", "Konuşma geçmişi temizlendi.",
+                              QSystemTrayIcon.MessageIcon.Information, 3000)
 
     def _check_single_instance(self):
         import signal
@@ -1132,30 +1223,36 @@ class AppManager:
                     logger.error(f"Dikte iyileştirme hatası: {e}")
 
             # --- BAĞLAM FARKINDALIĞI (PANO VE EKRAN) ---
+            # Hibrit geçiş: Tool calling aktifken (remote/local) eski keyword
+            # tabanlı pano/ekran enjeksiyonu atlanır; LLM ihtiyacı oldukça
+            # get_clipboard_text / read_screen_text araçlarını kendisi çağırır.
             context = None
             lower_text = text.lower()
             has_attachments = bool(getattr(self, '_context_queue', None))
-            
+            llm_mode = self.settings.get("llm_mode", "local")
+            tool_path_active = (
+                llm_mode in ("remote", "local")
+                and self.settings.get("enable_tool_calling", True)
+            )
+
             # Eğer halihazırda ek (browser extension verisi) gönderilmişse, sadece "ekran" ve "pano" gibi kelimeleri dikkate al.
             # Yoksa "bu maile", "şunu oku" gibi şeyler sürekli ekran okuma pop-up'ı çıkarır.
             if has_attachments:
                 context_keywords = ["pano", "kopyala", "ekran"]
             else:
                 context_keywords = ["pano", "kopyala", "bunu", "şunu", "bu ", "buradaki", "ekran"]
-            
-            if any(kw in lower_text for kw in context_keywords):
-                import subprocess
-                
+
+            if not tool_path_active and any(kw in lower_text for kw in context_keywords):
                 wants_screen = "ekran" in lower_text
                 has_permission = self.settings.get("auto_allow_clipboard", False)
-                
+
                 if not has_permission:
                     preview = ""
                     if wants_screen:
                         preview += "[DİKKAT: Ekranınızın Görüntüsü Çekilip Analiz Edilecek!]\n\n"
                     if current_clipboard_text:
                         preview += f"[PANO ÖNİZLEME]: {current_clipboard_text[:100]}...\n"
-                        
+
                     result = [False]
                     ev = threading.Event()
                     self.comm.ask_clipboard.emit(result, ev, preview.strip())
@@ -1165,41 +1262,21 @@ class AppManager:
                 if has_permission:
                     clip_text = current_clipboard_text
                     screen_text = ""
-                    
+
                     if wants_screen:
                         self.comm.update_text.emit("Ekran Okunuyor (OCR)...")
                         try:
-                            ss_path = "/tmp/ai_dikte_screen.png"
-                            txt_path = "/tmp/ai_dikte_screen"
-                            
-                            if os.system(f"grim {ss_path} >/dev/null 2>&1") != 0:
-                                if os.system(f"spectacle -b -n -o {ss_path} >/dev/null 2>&1") != 0:
-                                    os.system(f"gnome-screenshot -f {ss_path} >/dev/null 2>&1")
-                            
-                            if os.path.exists(ss_path):
-                                if os.system(f"tesseract {ss_path} {txt_path} -l tur+eng >/dev/null 2>&1") == 0:
-                                    if os.path.exists(txt_path + ".txt"):
-                                        with open(txt_path + ".txt", "r", encoding="utf-8") as f:
-                                            screen_text = f.read().strip()
+                            from ai_tools import read_screen_via_ocr
+                            screen_text = read_screen_via_ocr()
                         except Exception as e:
                             logger.error(f"OCR Hatası: {e}")
-                        finally:
-                            # Gizlilik ve Güvenlik: Ekran görüntüsü ve OCR metnini bellekten okuduktan sonra
-                            # /tmp/ dizinindeki bu hassas dosyaları derhal sil!
-                            try:
-                                if os.path.exists(ss_path):
-                                    os.remove(ss_path)
-                                if os.path.exists(txt_path + ".txt"):
-                                    os.remove(txt_path + ".txt")
-                            except OSError:
-                                pass
 
                     combined_context = ""
                     if clip_text:
                         combined_context += f"[Kullanıcının Panosundaki Metin]:\n{clip_text}\n\n"
                     if screen_text:
                         combined_context += f"[Kullanıcının Ekranındaki Metin (OCR)]:\n{screen_text}\n\n"
-                    
+
                     context = combined_context.strip()
 
             if getattr(self, '_context_queue', None):
@@ -1295,28 +1372,27 @@ class AppManager:
             
             wants_popup = False
             import re
-            
-            # --- BROWSER ACTION PARSING ---
-            browser_action_match = re.search(r'\[BROWSER_ACTION:\s*({.*?})\]', response, re.DOTALL)
-            if browser_action_match:
-                try:
-                    import json
-                    action_json_str = browser_action_match.group(1)
-                    action_data = json.loads(action_json_str)
-                    
-                    if hasattr(self, 'ext_server') and hasattr(self.ext_server, 'send_browser_command'):
-                        self.ext_server.send_browser_command(action_data)
-                        logger.info(f"Tarayıcı komutu gönderildi: {action_data}")
-                    
-                    # Remove the tag from response
-                    response = re.sub(r'\[BROWSER_ACTION:\s*({.*?})\]', '', response, flags=re.DOTALL).strip()
-                except Exception as e:
-                    logger.error(f"Browser action JSON parse hatası: {e}")
+
+            # Not: Eski [BROWSER_ACTION: {...}] etiket yolu kaldırıldı.
+            # Tarayıcı kontrolü artık browser_action tool'u üzerinden yapılıyor.
 
             # Daha esnek bir kontrol (büyük/küçük harf, alt tire veya boşluk, türkçe karakter vs.)
             if re.search(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', response, re.IGNORECASE):
                 wants_popup = True
                 response = re.sub(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', '', response, flags=re.IGNORECASE).strip()
+            else:
+                # Fallback: model etiketi unuttuysa ama okuma amaçlı araç kullanıp
+                # uzun bir yanıt ürettiyse kullanıcı muhtemelen cevabı görmek istiyor.
+                # (Yazma/çalıştırma araçlarında "arka planda tamamlandı" davranışı korunur.)
+                tools_used = getattr(self.router.llm, 'last_tools_used', []) or []
+                read_only_tools = {"read_file", "list_directory", "get_clipboard_text",
+                                   "read_screen_text", "get_active_window_context"}
+                if (tools_used and set(tools_used) <= read_only_tools
+                        and not getattr(self, '_context_queue', None)
+                        and len(response) >= 200
+                        and '[LLM Hatası' not in response):
+                    logger.info(f"[EKRANDA_GOSTER] etiketi yok ama fallback ile popup açılıyor (araçlar: {tools_used})")
+                    wants_popup = True
 
             print(f"\n[Dikte]: {text}\n[Yanıt]: {response}\n", flush=True)
 
@@ -1350,10 +1426,10 @@ class AppManager:
             self.comm.hide_overlay.emit()
             self._is_listening = False
 
-    def _confirm_callback(self, cmd_str, explanation):
+    def _confirm_callback(self, summary):
         result = [False]
         ev = threading.Event()
-        self.comm.ask_confirm.emit(cmd_str, explanation, result, ev)
+        self.comm.ask_confirm.emit(summary, result, ev)
         ev.wait()
         return result[0]
 
@@ -1365,22 +1441,17 @@ class AppManager:
         except Exception:
             pass
 
-    def _ask_confirm_gui(self, cmd_str, explanation, result_list, event):
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setWindowTitle("Güvenlik Onayı")
-        msg.setText(f"Şu komut çalıştırılmak isteniyor:\n\n<b>{cmd_str}</b>")
-        msg.setInformativeText(f"<b>Yapay Zeka Açıklaması:</b>\n{explanation}\n\nBu komutun çalıştırılmasına izin veriyor musunuz?")
-        btn_yes = msg.addButton("Evet", QMessageBox.ButtonRole.YesRole)
-        btn_no = msg.addButton("Hayır", QMessageBox.ButtonRole.NoRole)
-        msg.setDefaultButton(btn_no)
-        
-        # Wayland için Tool veya Frameless flag ekleyebiliriz
-        msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+    def _ask_confirm_gui(self, summary, result_list, event):
+        """Sade onay penceresi: başlık + tek soru + küçük detay."""
+        if isinstance(summary, str):
+            summary = {"title": "Onay", "question": summary}
+        title = summary.get("title") or "Onay"
+        question = summary.get("question") or ""
+        detail = summary.get("detail")
 
         self._play_notification_sound()
-        msg.exec()
-        result_list[0] = (msg.clickedButton() == btn_yes)
+        dlg = ConfirmDialog(title, question, detail)
+        result_list[0] = (dlg.exec() == QDialog.DialogCode.Accepted)
         event.set()
 
     def _ask_show_response_gui(self, result_list, event):

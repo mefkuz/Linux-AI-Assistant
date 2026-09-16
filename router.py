@@ -19,18 +19,20 @@ class Router:
         "ANCAK, eğer kullanıcı senden arka planda bir işlem yapmanı (dosya oluştur/sil vs.) isterse veya cevabın teknik bir komut/kod bloğu içeriyorsa, [EKRANDA_GOSTER] etiketini KULLANMA.\n\n"
         "ÖNEMLİ BİLGİ: Kullanıcı sana tarayıcısındaki bir sekme, ekranındaki bir makale, açık olan bir kodu veya bir video hakkında soru soruyorsa; bu içerik sana sistem tarafından [TARAYICIDAKİ SAYFANIN TAM METNİ], [TARAYICIDA SEÇİLEN METİN], [EKRANDAKİ DOSYANIN İÇERİĞİ] veya [VİDEONUN TAM İÇERİĞİ / ALTYAZISI] gibi etiketlerle otomatik olarak iletilmiş OLMALIDIR.\n"
         "EĞER bu etiketler sana iletilmemişse ve kullanıcı ekranındaki/sekmesindeki bir şeyi soruyorsa, ekranı doğrudan göremeyeceğini, ancak tarayıcı eklentisindeki (yapboz ikonu) 'Bu Sekmeyi Gönder' butonuna tıklayarak veya ekrandaki kısayol butonlarını kullanarak veriyi sana gönderebileceğini kibarca hatırlat.\n\n"
-        "TARAYICI YÖNETİMİ: Kullanıcı tarayıcısını kontrol etmeni isterse (sekme kapat, sayfayı kaydır, yeni sekme aç vb.) veya sana bir mail/form cevabı yazdırıyorsa, cevabının İÇİNDE şu formatta bir JSON komutu KESİNLİKLE OLMALIDIR:\n"
-        "`[BROWSER_ACTION: {\"action\": \"close_tab\"}]` (Mevcut sekmeyi kapatır),\n"
-        "`[BROWSER_ACTION: {\"action\": \"scroll_down\"}]` (Sayfayı aşağı kaydırır),\n"
-        "`[BROWSER_ACTION: {\"action\": \"fill_form\", \"params\": {\"text\": \"yazılacak metin\"}}]` (Aktif forma/maile metni YAZAR VE ENJEKTE EDER). EĞER kullanıcı bir maile veya mesaja cevap yazmanı istiyorsa, cevabı sadece ekranda göstermek yerine MUHAKKAK bu etiket ile `fill_form` eylemini kullanarak tarayıcıya gönder!\n\n"
+        "TARAYICI YÖNETİMİ: Kullanıcı tarayıcısını kontrol etmeni isterse (sekme kapat, sayfayı kaydır, yeni sekme aç vb.) veya bir mail/form cevabı yazdırıyorsa, `browser_action` aracını kullan (eklenti kurulu olmalıdır).\n\n"
         "Aynı zamanda her komut/istek için Loglar klasörünün içine bir tane TARİH-İSTEK-log.md oluştur. İçinde neler yaptığını sade açıkla. Log oluşturduğunu kullanıcıya söyleme. (Kullanıcı log oluşturma derse oluşturma).\n\n"
-        "Kullanıcı ile sadece bir kere konuşabileceğini, hafızan olmadığını unutma. Net cevaplar ver."
+        "Önceki konuşmaları hatırlıyorsun; kullanıcının göndermeleri ('az önce', 'ona ekle' vb.) için geçmişe bak. Net cevaplar ver."
     )
 
-    def __init__(self, settings=None, confirm_callback=None):
+    def __init__(self, settings=None, confirm_callback=None, browser_sender=None):
         self.settings = settings
         self.cli = CLIExecutor(settings=settings, confirm_callback=confirm_callback)
-        self.llm = LLMClient(settings=settings)
+        self.llm = LLMClient(settings=settings, confirm_callback=confirm_callback,
+                             browser_sender=browser_sender)
+
+    def set_browser_sender(self, browser_sender):
+        """Extension server hazır olduktan sonra tarayıcı bağlantısını enjekte eder."""
+        self.llm.browser_sender = browser_sender
 
     def _cli_keywords(self):
         """Yerleşik araçlar + kullanıcı tanımlı araçları birleştirir."""
@@ -54,7 +56,8 @@ class Router:
             analysis = self.llm.generate_response(
                 system_prompt=sys_prompt,
                 user_prompt=f"Terminalde '{command}' komutu çalıştırıldı. Sonuçları değerlendir.",
-                context=context
+                context=context,
+                use_history=False  # İç analiz: geçmişe yazma, bağlam şişirmesin
             )
             return (
                 f"\n--- KOMUT ÇIKTISI ---\n{cli_result['stdout']}{cli_result['stderr']}"
