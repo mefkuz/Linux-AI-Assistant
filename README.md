@@ -86,6 +86,7 @@ Configure your global hotkey and choose the application language.
 
 **Listening & Overlay Settings**
 Fine-tune microphone sensitivity, pause detection thresholds, and the physical position of the overlay.
+
 ![Listening Settings](docs/screenshots/listening-settings.png)
 
 **AI & API Configuration**
