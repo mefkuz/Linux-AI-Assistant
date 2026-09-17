@@ -5,8 +5,8 @@ echo "======================================"
 echo "    Linux-AI-Assistant Kurulum Sihirbazı"
 echo "======================================"
 
-# Scriptin bulunduğu dizini al
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+# Scriptin bulunduğu dizinin bir üstü = proje kökü
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." &> /dev/null && pwd)"
 cd "$APP_DIR"
 
 echo "[1/4] Gerekli sistem paketleri kontrol ediliyor..."
@@ -45,7 +45,7 @@ source venv/bin/activate
 
 echo "[3/4] Python kütüphaneleri yükleniyor..."
 pip install --upgrade pip
-pip install PyQt6 pyaudio SpeechRecognition pynput requests gTTS pygame
+pip install -r requirements.txt
 
 echo "[4/4] Masaüstü ve Başlangıç (Autostart) kısayolları oluşturuluyor..."
 
@@ -58,7 +58,7 @@ mkdir -p "$AUTOSTART_DIR"
 DESKTOP_FILE_CONTENT="[Desktop Entry]
 Name=Linux-AI-Assistant
 Comment=Akıllı Linux AI Assistant ve Sesli Asistan
-Exec=$APP_DIR/venv/bin/python $APP_DIR/gui_main.py
+Exec=$APP_DIR/venv/bin/python $APP_DIR/app.py
 Path=$APP_DIR
 Icon=audio-input-microphone
 Terminal=false
@@ -78,5 +78,5 @@ echo "======================================"
 echo "Kurulum Tamamlandı!"
 echo "Uygulamanız menüye eklendi ve bilgisayar her açıldığında otomatik başlayacak."
 echo "Linux-AI-Assistant uygulamasını şimdi menüden aratarak veya aşağıdaki komutla başlatabilirsiniz:"
-echo "$APP_DIR/venv/bin/python $APP_DIR/gui_main.py"
+echo "$APP_DIR/venv/bin/python $APP_DIR/app.py"
 echo "======================================"

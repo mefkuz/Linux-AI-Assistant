@@ -1,7 +1,8 @@
 import subprocess
 import logging
 import os
-from cli_tools_registry import KNOWN_CLI_TOOLS, build_cli_command
+from src.llm.cli_registry import KNOWN_CLI_TOOLS, build_cli_command
+from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ def _short_err(text, limit=500):
     text = str(text or "")
     if len(text) <= limit:
         return text
-    return text[:limit] + f"\n... ({len(text) - limit} karakter kesildi)"
+    return text[:limit] + tr("\n... ({n} karakter kesildi)").format(n=len(text) - limit)
 
 
 class LLMClient:
@@ -20,7 +21,7 @@ class LLMClient:
         self.confirm_callback = confirm_callback
         self.browser_sender = browser_sender
         # Son generate_response çağrısında kullanılan araç adları.
-        # gui_main'deki [EKRANDA_GOSTER] fallback heuristic'i için.
+        # src/gui/app.py'deki [EKRANDA_GOSTER] fallback heuristic'i için.
         self.last_tools_used = []
         # Konuşma geçmişi: [{"role": "user"|"assistant", "content": str}, ...]
         # Sadece ham kullanıcı sorusu + final asistan yanıtı tutulur
@@ -107,7 +108,7 @@ class LLMClient:
             resp_clean = re.sub(r'^\s*<think>.*', '', resp_clean, flags=re.DOTALL).strip()
 
             if not resp_clean:
-                return "(Yapay zeka yanıt üretemedi veya sadece düşünce bloğu gönderdi. Terminaldeki [DEBUG] logunu kontrol edin.)"
+                return tr("(Yapay zeka yanıt üretemedi veya sadece düşünce bloğu gönderdi. Terminaldeki [DEBUG] logunu kontrol edin.)")
 
             # Geçmişe yaz: ham soru + temiz yanıt (bağlam ve tool çağrıları hariç).
             if use_history:
@@ -116,7 +117,7 @@ class LLMClient:
             return resp_clean
         except Exception as e:
             logger.error(f"LLM hatası ({mode}): {e}")
-            return f"[LLM Hatası ({mode})]: {str(e)}"
+            return tr("[LLM Hatası ({mode})]: {e}").format(mode=mode, e=str(e))
 
     # -- konuşma geçmişi (hafıza) ----------------------------
 
@@ -174,12 +175,12 @@ class LLMClient:
     def _call_remote(self, system_prompt, user_prompt, history=None):
         import requests
         if not self.settings:
-            raise ValueError("Uzak mod için ayarlar yüklenmedi.")
+            raise ValueError(tr("Uzak mod için ayarlar yüklenmedi."))
         api_key = self.settings.get("remote_api_key", "")
         url     = self.settings.get("remote_api_url",  "https://api.openai.com/v1/chat/completions")
         model   = self.settings.get("remote_model",    "gpt-4")
         if not api_key:
-            raise ValueError("REMOTE_LLM_API_KEY boş. Ayarlardan doldurun.")
+            raise ValueError(tr("REMOTE_LLM_API_KEY boş. Ayarlardan doldurun."))
         import requests
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history or [])
@@ -219,7 +220,7 @@ class LLMClient:
         ToolExecutor ile çalıştırır, sonuçları role:"tool" olarak geri verir.
         """
         import requests
-        from ai_tools import get_openai_tools, ToolExecutor
+        from src.tools.executor import get_openai_tools, ToolExecutor
 
         executor = ToolExecutor(
             settings=self.settings,
@@ -288,10 +289,9 @@ class LLMClient:
         if not content.strip() and self.last_tools_used:
             # Model özet üretemediyse kullanıcıya boş ekran gösterme:
             # yapılan işleri listele.
-            content = (
-                f"İşlem tamamlandı (kullanılan araçlar: {', '.join(self.last_tools_used)}). "
-                "Detay için Loglar klasörüne bakabilirsiniz."
-            )
+            done = tr("İşlem tamamlandı (kullanılan araçlar: {tools}).").format(
+                tools=", ".join(self.last_tools_used))
+            content = done + " " + tr("Detay için Loglar klasörüne bakabilirsiniz.")
         return content
 
     def _call_cli(self, system_prompt, user_prompt, history=None):
@@ -300,7 +300,7 @@ class LLMClient:
         Araç kendi yöntemini (stdin/arg) ve model formatını registry'den alır.
         """
         if not self.settings:
-            raise ValueError("CLI modu için ayarlar yüklenmedi.")
+            raise ValueError(tr("CLI modu için ayarlar yüklenmedi."))
 
         tool_key   = self.settings.get("llm_cli_tool_key", "agy (Antigravity)")
         model      = self.settings.get("llm_cli_model", "").strip() or None
@@ -351,7 +351,6 @@ class LLMClient:
         output = result.stdout.strip() or result.stderr.strip()
         if not output:
             raise RuntimeError(
-                f"'{cmd[0]}' aracından çıktı alınamadı. "
-                "Aracın doğru kurulduğunu ve PATH'te olduğunu kontrol edin."
+                tr("'{cmd}' aracından çıktı alınamadı. Aracın doğru kurulduğunu ve PATH'te olduğunu kontrol edin.").format(cmd=cmd[0])
             )
         return output

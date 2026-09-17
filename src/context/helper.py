@@ -1,6 +1,7 @@
 import subprocess
 import re
 import os
+from src.core.i18n import tr
 
 def get_active_contexts():
     """
@@ -48,10 +49,10 @@ def get_active_contexts():
                     is_vlc = "vlc" in player.lower()
                     
                     if is_youtube:
-                        contexts.append({"type": "media", "icon": "▶", "label": "YouTube Videosunu", "title": title or "YouTube Video", "detail": url})
+                        contexts.append({"type": "media", "icon": "▶", "label": tr("YouTube Videosunu"), "title": title or "YouTube Video", "detail": url})
                     elif is_spotify:
-                        disp = f"{artist} - {title}" if artist and title else (title or "Spotify Şarkısı")
-                        contexts.append({"type": "media", "icon": "♪", "label": "Çalan Şarkıyı", "title": disp, "detail": url})
+                        disp = f"{artist} - {title}" if artist and title else (title or tr("Spotify Şarkısı"))
+                        contexts.append({"type": "media", "icon": "♪", "label": tr("Çalan Şarkıyı"), "title": disp, "detail": url})
     except Exception:
         pass
 
@@ -85,21 +86,21 @@ def get_active_contexts():
         try:
             # Terminal
             if "Terminal" in w_title or "Konsole" in w_title or "Alacritty" in w_title or "Kitty" in w_title or "@" in w_title:
-                contexts.append({"type": "window", "icon": "🖥️", "label": "Terminali", "title": w_title, "detail": None})
+                contexts.append({"type": "window", "icon": "🖥️", "label": tr("Terminali"), "title": w_title, "detail": None})
             # Dosya Yöneticisi
             elif "Nautilus" in w_title or "Dolphin" in w_title or "Thunar" in w_title or "Nemo" in w_title:
-                contexts.append({"type": "window", "icon": "📁", "label": "Açık Klasörü", "title": w_title, "detail": None})
+                contexts.append({"type": "window", "icon": "📁", "label": tr("Açık Klasörü"), "title": w_title, "detail": None})
             # Ofis
             elif "LibreOffice" in w_title or "Word" in w_title or "Excel" in w_title:
-                contexts.append({"type": "window", "icon": "📄", "label": "Üzerinde Çalışılan Belgeyi", "title": w_title, "detail": None})
+                contexts.append({"type": "window", "icon": "📄", "label": tr("Üzerinde Çalışılan Belgeyi"), "title": w_title, "detail": None})
             # Tarayıcı (Eğer medya algılanmadıysa veya sekmeyi de eklemek isterse)
             elif "Firefox" in w_title or "Chrome" in w_title or "Brave" in w_title or "Edge" in w_title:
-                contexts.append({"type": "window", "icon": "🌐", "label": "Açık Sekmeyi", "title": w_title, "detail": None})
+                contexts.append({"type": "window", "icon": "🌐", "label": tr("Açık Sekmeyi"), "title": w_title, "detail": None})
             # Bilinmeyen / Klasör (Örneğin sadece "Belgeler" yazıyorsa)
             elif w_title:
                 # Kendi arayüzümüzü yoksayalım
                 if "Linux-AI-Assistant" not in w_title:
-                    contexts.append({"type": "window", "icon": "🗔", "label": "Açık Pencereyi", "title": w_title, "detail": None})
+                    contexts.append({"type": "window", "icon": "🗔", "label": tr("Açık Pencereyi"), "title": w_title, "detail": None})
         except Exception:
             pass
 

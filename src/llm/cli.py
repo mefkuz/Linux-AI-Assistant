@@ -1,7 +1,8 @@
 import subprocess
 import logging
 import os
-from security import SecurityManager
+from src.core.security import SecurityManager
+from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class CLIExecutor:
         try:
             tokens = self.security.sanitize_command(command_str)
             if not tokens:
-                raise ValueError("Boş komut algılandı.")
+                raise ValueError(tr("Boş komut algılandı."))
 
             allow_sudo = self.settings.get("allow_sudo", False) if self.settings else False
             require_confirm = self.settings.get("require_confirm_on_write", True) if self.settings else True
@@ -24,7 +25,7 @@ class CLIExecutor:
                     return {
                         "status": "cancelled",
                         "stdout": "",
-                        "stderr": "İşlem kullanıcı tarafından iptal edildi.",
+                        "stderr": tr("İşlem kullanıcı tarafından iptal edildi."),
                         "exit_code": -1
                     }
 
@@ -57,7 +58,7 @@ class CLIExecutor:
         except FileNotFoundError:
             cmd_name = command_str.split()[0] if command_str else "?"
             return {"status": "error", "stdout": "",
-                    "stderr": f"Komut bulunamadı: '{cmd_name}'", "exit_code": 127}
+                    "stderr": tr("Komut bulunamadı: '{cmd}'").format(cmd=cmd_name), "exit_code": 127}
         except Exception as e:
             logger.exception("Komut çalıştırılırken hata.")
             return {"status": "error", "stdout": "", "stderr": str(e), "exit_code": 1}

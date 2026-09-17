@@ -85,6 +85,6 @@ def start_server():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     
-    # Return the module namespace so we can call send_browser_command from gui_main
+    # Return the module namespace so we can call send_browser_command from the GUI layer
     import sys
     return sys.modules[__name__]

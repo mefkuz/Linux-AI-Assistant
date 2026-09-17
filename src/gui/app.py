@@ -45,13 +45,17 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap, QPen, QKeyEvent, QKeySequence
 
-from settings_manager import SettingsManager
-from hotkey_manager import HotkeyManager
-from audio_listener import AudioListener
-from router import Router
-from llm_client import LLMClient
-from cli_tools_registry import KNOWN_CLI_TOOLS
-from context_helper import get_active_contexts
+from src.core.settings import SettingsManager
+from src.audio.hotkeys import HotkeyManager
+from src.audio.listener import AudioListener
+from src.llm.router import Router
+from src.llm.client import LLMClient
+from src.llm.cli_registry import KNOWN_CLI_TOOLS
+from src.context.helper import get_active_contexts
+from src.core.i18n import set_language as set_core_lang
+from src.core import updater
+from src.core.version import __version__
+from src.core.settings import PROJECT_ROOT
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -108,7 +112,88 @@ TRANSLATIONS = {
     "İşlem arka planda tamamlandı ✓": "Task completed in background ✓",
     "Yapay Zeka Yanıtı": "AI Response",
     "İşlem Tamamlandı.": "Task Completed.",
-    "Kapat": "Close"
+    "Kapat": "Close",
+    "Tarayıcı": "Browser",
+    "Kaydedildi": "Saved",
+    "Ayarlar başarıyla kaydedildi.": "Settings saved successfully.",
+    "Dil değişikliklerinin tamamen uygulanması için lütfen uygulamayı yeniden başlatın.": "Please restart the app for language changes to fully apply.",
+    "Kısayol atamak için tıklayın...": "Click to assign a shortcut...",
+    "Tuşlara basın... (İptal için ESC)": "Press keys... (ESC to cancel)",
+    "Sustur": "Mute",
+    "Evet": "Yes",
+    "Hayır": "No",
+    "Ekle": "Add",
+    "Eklendi": "Added",
+    "Onay": "Confirm",
+    "Bildirimleri aktif masaüstüne yapıştır (Sticky Window)": "Pin notifications to active desktop (Sticky Window)",
+    "Dinleme zaman aşımı:": "Listening timeout:",
+    "Sonuç gösterim süresi:": "Result display time:",
+    "Mikrofon hassasiyeti:": "Mic sensitivity:",
+    "Düşük = daha hassas. Önerilen: 1000–4000": "Lower = more sensitive. Recommended: 1000–4000",
+    "Sessizlik eşiği (cümle sonu):": "Silence threshold (sentence end):",
+    "Maks. konuşma süresi:": "Max. speech duration:",
+    "Tek bir konuşmada maksimum süre.": "Maximum duration of a single utterance.",
+    " sn": " s",
+    " × 0.1 sn": " × 0.1 s",
+    "Mod:": "Mode:",
+    "Yerel Sunucu (Local)": "Local Server",
+    "Uzak Sunucu (Remote)": "Remote Server",
+    "Terminal (CLI)": "Terminal (CLI)",
+    "Model seçin veya yazın": "Select or type a model",
+    "Opsiyonel ek argümanlar (örn: --temperature 0.7)": "Optional extra args (e.g. --temperature 0.7)",
+    "Bu araç model seçimi desteklemiyor": "This tool doesn't support model selection",
+    "Yanıtlar": "Responses",
+    "Yanıtları sormadan otomatik göster": "Show responses automatically without asking",
+    "Kapalıysa 'Cevabı görmek istiyor musun?' diye sorulur.": "If off, asks 'Do you want to see the answer?'.",
+    "Akıllı Dikte Düzeltici": "Smart Dictation Fixer",
+    "Okuma İzinleri": "Read Permissions",
+    "Ekran ve pano okumaya her zaman izin ver": "Always allow screen & clipboard reading",
+    "Araç Çağırma (Uzak/Yerel API)": "Tool Calling (Remote/Local API)",
+    "Araç Çağırma aktif": "Tool Calling enabled",
+    "Dosya yazma ve komut çalıştırmadan önce sor": "Ask before writing files & running commands",
+    "Kapalı olsa bile tehlikeli komutlar (rm, sudo vb.) her zaman sorulur.": "Dangerous commands (rm, sudo, etc.) always ask, even if off.",
+    "Maks. araç turu:": "Max. tool rounds:",
+    "Üst üste kaç tur araç çağrılabilir (sonsuz döngü koruması).": "How many back-to-back tool rounds are allowed (infinite-loop guard).",
+    "Hafıza": "Memory",
+    "Hatırlanacak konuşma turu:": "Dialogue turns to remember:",
+    "Son kaç soru-cevap turu modele gönderilir.\n0 = hafıza kapalı.": "How many recent Q&A turns are sent to the model.\n0 = memory off.",
+    "Çalışma Alanı Seç": "Select Workspace",
+    "Seçili metin eklendi": "Selected text added",
+    "Video eklendi": "Video added",
+    "PDF belgesi eklendi": "PDF document added",
+    "E-posta eklendi": "Email added",
+    "Tarayıcı sekmesi eklendi": "Browser tab added",
+    "Seni dinliyorum...": "Listening to you...",
+    "Ses algılanamadı.": "No speech detected.",
+    "Ses Kaydı Alındı.": "Voice recorded.",
+    "Akıllı Dikte Düzeltici Çalışıyor...": "Smart Dictation Fixer running...",
+    "Ekran Okunuyor (OCR)...": "Reading screen (OCR)...",
+    "Video Altyazısı Okunuyor...": "Reading video subtitles...",
+    "PDF İçeriği Okunuyor...": "Reading PDF content...",
+    "Hafızayı Temizle": "Clear Memory",
+    "Yapay zekanın hatırladığı konuşma geçmişini siler.": "Clears the conversation history the AI remembers.",
+    "Konuşma geçmişi temizlendi.": "Conversation history cleared.",
+    "Uygulama Zaten Çalışıyor": "Already Running",
+    "Linux-AI-Assistant şu anda arka planda zaten açık!": "Linux-AI-Assistant is already running in the background!",
+    "Yanıtı Göster": "Show Response",
+    "Yapay zeka işlemini tamamladı ve size bir yanıt vermek istiyor.": "The AI finished and has a response for you.",
+    "Cevabı ekranda görmek istiyor musunuz?": "Do you want to see the answer on screen?",
+    "Bağlam Farkındalığı (Pano ve Ekran Erişimi)": "Context Awareness (Clipboard & Screen Access)",
+    "Cümlenizde bağlam gerektiren kelimeler tespit edildi. Yapay zekaya panonuzdaki/ekranınızdaki metin de gönderilsin mi?": "Context-dependent words detected. Also send your clipboard/screen text to the AI?",
+    "Güncellemeleri Denetle": "Check for Updates",
+    "Güncelleme denetleniyor...": "Checking for updates...",
+    "Kullanılabilir güncelleme yok.": "No updates available.",
+    "Güncelleme denetimi başarısız.": "Update check failed.",
+    "Yeni sürüm mevcut": "New version available",
+    "Şimdi Güncelle": "Update Now",
+    "Daha Sonra": "Later",
+    "Bu Sürümü Atla": "Skip This Version",
+    "Güncelleniyor, lütfen bekleyin...": "Updating, please wait...",
+    "Güncelleme tamamlandı. Yeniden başlatılsın mı?": "Update complete. Restart now?",
+    "Yeniden Başlat": "Restart",
+    "Release Sayfasını Aç": "Open Release Page",
+    "Açılışta güncellemeleri otomatik denetle": "Check for updates automatically on startup",
+    "Şimdi denetle": "Check now",
 }
 
 _APP_LANG = "tr"
@@ -128,6 +213,7 @@ class Communicate(QObject):
     ask_clipboard     = pyqtSignal(object, object, str) # result_list, threading.Event, text
     show_response     = pyqtSignal(str) # text
     show_context_btns = pyqtSignal(object) # list of dicts
+    update_checked = pyqtSignal(object, object) # info dict, silent bool
     hide_context_btns = pyqtSignal()
 
 # ──────────────────────────────────────────────────────────
@@ -137,12 +223,12 @@ class HotkeyCaptureWidget(QLineEdit):
     def __init__(self, current_hotkey=""):
         super().__init__(current_hotkey)
         self.setReadOnly(True)
-        self.setPlaceholderText("Kısayol atamak için tıklayın...")
+        self.setPlaceholderText(tr("Kısayol atamak için tıklayın..."))
         self.capturing = False
 
     def mousePressEvent(self, event):
         self.capturing = True
-        self.setText("Tuşlara basın... (İptal için ESC)")
+        self.setText(tr("Tuşlara basın... (İptal için ESC)"))
         self.setStyleSheet("background-color: #2b5b84; color: white;")
         super().mousePressEvent(event)
 
@@ -290,6 +376,10 @@ class OverlayWindow(QWidget):
     def _init_ui(self):
         global _APP_LANG
         _APP_LANG = self.settings.get('app_language', 'tr')
+        try:
+            set_core_lang(_APP_LANG)
+        except Exception:
+            pass
         # Eğer sticky_window açıksa X11/Wayland üzerinde ToolTip bayrağı kullanılarak
         # pencerenin tüm masaüstlerinde ve monitörlerde yapışkan (sticky) kalması sağlanır.
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
@@ -346,7 +436,7 @@ class OverlayWindow(QWidget):
         inner.addWidget(self.waveform)
 
         # Stop Button
-        self.stop_btn = QPushButton("Sustur")
+        self.stop_btn = QPushButton(tr("Sustur"))
         self.stop_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(220, 50, 50, 200);
@@ -425,7 +515,7 @@ class OverlayWindow(QWidget):
             return
             
         for ctx in contexts:
-            btn = QPushButton(f"{ctx['icon']} {ctx['label']} Ekle")
+            btn = QPushButton(f"{ctx['icon']} {ctx['label']} {tr('Ekle')}")
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: rgba(20, 20, 25, 180);
@@ -446,7 +536,7 @@ class OverlayWindow(QWidget):
             # Use closure to capture ctx
             def make_callback(context_data, button):
                 def callback():
-                    button.setText(f"{context_data['icon']} Eklendi ✓")
+                    button.setText(f"{context_data['icon']} {tr('Eklendi')} ✓")
                     button.setEnabled(False)
                     self.context_added.emit(context_data['title'], context_data['detail'] or "")
                 return callback
@@ -502,8 +592,8 @@ class ConfirmDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
         )
-        buttons.button(QDialogButtonBox.StandardButton.Yes).setText("Evet")
-        buttons.button(QDialogButtonBox.StandardButton.No).setText("Hayır")
+        buttons.button(QDialogButtonBox.StandardButton.Yes).setText(tr("Evet"))
+        buttons.button(QDialogButtonBox.StandardButton.No).setText(tr("Hayır"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -520,7 +610,7 @@ class ResponseWindow(QDialog):
         layout.setSpacing(10)
         
         # Etiket
-        lbl = QLabel("<b>İşlem Tamamlandı.</b>")
+        lbl = QLabel("<b>" + tr("İşlem Tamamlandı.") + "</b>")
         layout.addWidget(lbl)
         
         # Yanıt Alanı (Kopyalanabilir, Markdown destekli QTextBrowser)
@@ -559,6 +649,26 @@ class SettingsWindow(QWidget):
         # X butonuna basılınca kapat değil, gizle
         event.ignore()
         self.hide()
+
+    def _manual_update_check(self):
+        """Ayarlar sekmesindeki 'Şimdi denetle' — sonucu durum satırına yazar."""
+        self.upd_status_lbl.setText(tr("Güncelleme denetleniyor..."))
+        self.upd_now_btn.setEnabled(False)
+
+        def _bg():
+            info = updater.check_for_updates()
+            cur = (info.get("current_version") or __version__)
+            if not info.get("ok"):
+                msg = tr("Güncelleme denetimi başarısız.")
+            elif info.get("update_available"):
+                v = info.get("latest_version", "")
+                msg = f"{tr('Yeni sürüm mevcut')}: v{v} (v{cur} → v{v})."
+            else:
+                msg = f"{tr('Kullanılabilir güncelleme yok.')} (v{cur})"
+            QTimer.singleShot(0, lambda: (self.upd_status_lbl.setText(msg),
+                                          self.upd_now_btn.setEnabled(True)))
+
+        threading.Thread(target=_bg, daemon=True).start()
 
     def _init_ui(self):
         self.setWindowTitle(tr("Linux AI Assistant — Ayarlar"))
@@ -619,7 +729,7 @@ class SettingsWindow(QWidget):
         ws_row.addWidget(ws_browse)
         fl.addRow(tr("Çalışma alanı:"), ws_row)
 
-        self.sticky_cb = QCheckBox("Bildirimleri aktif masaüstüne yapıştır (Sticky Window)")
+        self.sticky_cb = QCheckBox(tr("Bildirimleri aktif masaüstüne yapıştır (Sticky Window)"))
         self.sticky_cb.setChecked(self.settings.get("sticky_window", True))
         fl.addRow("", self.sticky_cb)
 
@@ -631,37 +741,41 @@ class SettingsWindow(QWidget):
         ll.setSpacing(12); ll.setContentsMargins(16, 16, 16, 16)
 
         self.timeout_spin = QSpinBox()
-        self.timeout_spin.setRange(2, 30); self.timeout_spin.setSuffix(" sn")
+        self.timeout_spin.setRange(2, 30); self.timeout_spin.setSuffix(tr(" sn"))
         self.timeout_spin.setValue(self.settings.get("overlay_timeout_seconds", 5))
-        ll.addRow("Dinleme zaman aşımı:", self.timeout_spin)
+        ll.addRow(tr("Dinleme zaman aşımı:"), self.timeout_spin)
 
         self.display_spin = QSpinBox()
-        self.display_spin.setRange(1, 10); self.display_spin.setSuffix(" sn")
+        self.display_spin.setRange(1, 10); self.display_spin.setSuffix(tr(" sn"))
         self.display_spin.setValue(self.settings.get("overlay_display_seconds", 3))
-        ll.addRow("Sonuç gösterim süresi:", self.display_spin)
+        ll.addRow(tr("Sonuç gösterim süresi:"), self.display_spin)
 
         self.sensitivity_spin = QSpinBox()
         self.sensitivity_spin.setRange(200, 10000)
         self.sensitivity_spin.setSingleStep(100)
         self.sensitivity_spin.setValue(self.settings.get("mic_sensitivity", 3000))
-        self.sensitivity_spin.setToolTip("Düşük = daha hassas. Önerilen: 1000–4000")
-        ll.addRow("Mikrofon hassasiyeti:", self.sensitivity_spin)
+        self.sensitivity_spin.setToolTip(tr("Düşük = daha hassas. Önerilen: 1000–4000"))
+        ll.addRow(tr("Mikrofon hassasiyeti:"), self.sensitivity_spin)
 
         self.pause_spin = QSpinBox()
-        self.pause_spin.setRange(5, 50); self.pause_spin.setSuffix(" × 0.1 sn")
+        self.pause_spin.setRange(5, 50); self.pause_spin.setSuffix(tr(" × 0.1 sn"))
         self.pause_spin.setValue(int(self.settings.get("pause_threshold", 1.5) * 10))
         self.pause_spin.setToolTip(
             "Kaç saniyelik sessizlik 'konuşma bitti' sayılsın?\n"
             "Artırın → cümle ortasında kesilmez\n"
             "Azaltın → hızlı tepki verir (Varsayılan: 1.5 sn = 15)"
+            if _APP_LANG == "tr" else
+            "How much silence counts as 'speech ended'?\n"
+            "Increase → won't cut mid-sentence\n"
+            "Decrease → faster response (Default: 1.5 s = 15)"
         )
-        ll.addRow("Sessizlik eşiği (cümle sonu):", self.pause_spin)
+        ll.addRow(tr("Sessizlik eşiği (cümle sonu):"), self.pause_spin)
 
         self.phrase_limit_spin = QSpinBox()
-        self.phrase_limit_spin.setRange(5, 120); self.phrase_limit_spin.setSuffix(" sn")
+        self.phrase_limit_spin.setRange(5, 120); self.phrase_limit_spin.setSuffix(tr(" sn"))
         self.phrase_limit_spin.setValue(self.settings.get("phrase_time_limit", 30))
-        self.phrase_limit_spin.setToolTip("Tek bir konuşmada maksimum süre.")
-        ll.addRow("Maks. konuşma süresi:", self.phrase_limit_spin)
+        self.phrase_limit_spin.setToolTip(tr("Tek bir konuşmada maksimum süre."))
+        ll.addRow(tr("Maks. konuşma süresi:"), self.phrase_limit_spin)
 
         tabs.addTab(tab_listen, tr("Dinleme"))
 
@@ -671,11 +785,11 @@ class SettingsWindow(QWidget):
         al.setContentsMargins(16, 16, 16, 16); al.setSpacing(10)
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mod:"))
+        mode_row.addWidget(QLabel(tr("Mod:")))
         self.llm_mode_combo = QComboBox()
-        self.llm_mode_combo.addItem("Yerel Sunucu (Local)", "local")
-        self.llm_mode_combo.addItem("Uzak Sunucu (Remote)", "remote")
-        self.llm_mode_combo.addItem("Terminal (CLI)", "cli")
+        self.llm_mode_combo.addItem(tr("Yerel Sunucu (Local)"), "local")
+        self.llm_mode_combo.addItem(tr("Uzak Sunucu (Remote)"), "remote")
+        self.llm_mode_combo.addItem(tr("Terminal (CLI)"), "cli")
         cur_mode = self.settings.get("llm_mode", "local")
         idx = self.llm_mode_combo.findData(cur_mode)
         if idx >= 0: self.llm_mode_combo.setCurrentIndex(idx)
@@ -727,15 +841,18 @@ class SettingsWindow(QWidget):
 
         self.cli_model_combo = QComboBox()
         self.cli_model_combo.setEditable(True)  # Elle yazılabilsin
-        self.cli_model_combo.setPlaceholderText("Model seçin veya yazın")
+        self.cli_model_combo.setPlaceholderText(tr("Model seçin veya yazın"))
         cp.addRow(tr("Model:"), self.cli_model_combo)
 
         self.cli_extra_input = QLineEdit(self.settings.get("llm_cli_extra_args", ""))
-        self.cli_extra_input.setPlaceholderText("Opsiyonel ek argümanlar (örn: --temperature 0.7)")
+        self.cli_extra_input.setPlaceholderText(tr("Opsiyonel ek argümanlar (örn: --temperature 0.7)"))
         cp.addRow(tr("Ek argümanlar:"), self.cli_extra_input)
 
         note = QLabel("Sesiniz metne çevrildikten sonra stdin üzerinden\n"
-                       "seçilen araca gönderilir. Araç yanıtını stdout'a yazdırmalıdır.")
+                       "seçilen araca gönderilir. Araç yanıtını stdout'a yazdırmalıdır."
+                       if _APP_LANG == "tr" else
+                       "After your voice is transcribed it is piped via stdin\n"
+                       "to the selected tool. The tool must print its answer to stdout.")
         note.setStyleSheet("color: #888; font-size: 11px;")
         cp.addRow(note)
         self.llm_stack.addWidget(cli_llm_panel)  # index 2
@@ -766,7 +883,7 @@ class SettingsWindow(QWidget):
         
         self.sys_prompt_input = QTextEdit()
         self.sys_prompt_input.setPlainText(self.settings.get("system_prompt", ""))
-        self.sys_prompt_input.setPlaceholderText("Sen yetenekli bir asistan...")
+        self.sys_prompt_input.setPlaceholderText("Sen yetenekli bir asistan..." if _APP_LANG == "tr" else "You are a skilled assistant...")
         pl.addWidget(self.sys_prompt_input)
 
         tabs.addTab(tab_prompt, tr("Sistem Promptu"))
@@ -788,54 +905,65 @@ class SettingsWindow(QWidget):
             sl.addWidget(cb)
             return cb
 
-        _section("Yanıtlar")
+        _section(tr("Yanıtlar"))
         self.popup_check = _check(
-            "Yanıtları sormadan otomatik göster",
-            "Kapalıysa 'Cevabı görmek istiyor musun?' diye sorulur.",
+            tr("Yanıtları sormadan otomatik göster"),
+            tr("Kapalıysa 'Cevabı görmek istiyor musun?' diye sorulur."),
             "auto_show_popup")
         self.opt_check = _check(
-            "Akıllı Dikte Düzeltici",
+            tr("Akıllı Dikte Düzeltici"),
             "Diktedeki duraksama/hataları (ııı, eee, şey) LLM ile temizler.\n"
-            "UYARI: Yanıt süresini uzatır, token kullanımını ~2 katına çıkarır.",
+            "UYARI: Yanıt süresini uzatır, token kullanımını ~2 katına çıkarır."
+            if _APP_LANG == "tr" else
+            "Cleans dictation pauses/errors (uhh, umm) with the LLM.\n"
+            "WARNING: slower responses, ~2x token usage.",
             "optimize_dictation")
 
-        _section("Okuma İzinleri")
+        _section(tr("Okuma İzinleri"))
         self.clip_check = _check(
-            "Ekran ve pano okumaya her zaman izin ver",
+            tr("Ekran ve pano okumaya her zaman izin ver"),
             "Kapalıysa yapay zeka okumadan önce her seferinde sorar.\n"
             "Terminal modunda 'bunu/şunu/ekran' denince, Araç Çağırma aktifken\n"
-            "okuma yapılmadan hemen önce sorulur.",
+            "okuma yapılmadan hemen önce sorulur."
+            if _APP_LANG == "tr" else
+            "If off, the AI asks before every read.\n"
+            "In terminal mode ('this/that/screen') or with Tool Calling,\n"
+            "asks right before reading.",
             "auto_allow_clipboard")
 
-        _section("Araç Çağırma (Uzak/Yerel API)")
+        _section(tr("Araç Çağırma (Uzak/Yerel API)"))
         self.tool_enable_check = _check(
-            "Araç Çağırma aktif",
+            tr("Araç Çağırma aktif"),
             "Yapay zeka dosya/komut/ekran/pano/tarayıcı araçlarını kullanabilir.\n"
             "Aktifken eski keyword tabanlı pano/ekran enjeksiyonu devre dışı kalır.\n"
-            "Terminal (CLI) modunda etkisizdir.",
+            "Terminal (CLI) modunda etkisizdir."
+            if _APP_LANG == "tr" else
+            "The AI can use file/command/screen/clipboard/browser tools.\n"
+            "When on, legacy keyword-based clipboard/screen injection is disabled.\n"
+            "No effect in terminal (CLI) mode.",
             "enable_tool_calling", True)
         self.tool_confirm_check = _check(
-            "Dosya yazma ve komut çalıştırmadan önce sor",
-            "Kapalı olsa bile tehlikeli komutlar (rm, sudo vb.) her zaman sorulur.",
+            tr("Dosya yazma ve komut çalıştırmadan önce sor"),
+            tr("Kapalı olsa bile tehlikeli komutlar (rm, sudo vb.) her zaman sorulur."),
             "require_confirm_on_tool")
 
         iter_row = QHBoxLayout()
-        iter_row.addWidget(QLabel("Maks. araç turu:"))
+        iter_row.addWidget(QLabel(tr("Maks. araç turu:")))
         self.tool_iter_spin = QSpinBox()
         self.tool_iter_spin.setRange(1, 10)
         self.tool_iter_spin.setValue(self.settings.get("tool_max_iterations", 5))
-        self.tool_iter_spin.setToolTip("Üst üste kaç tur araç çağrılabilir (sonsuz döngü koruması).")
+        self.tool_iter_spin.setToolTip(tr("Üst üste kaç tur araç çağrılabilir (sonsuz döngü koruması)."))
         iter_row.addWidget(self.tool_iter_spin)
         iter_row.addStretch()
         sl.addLayout(iter_row)
 
-        _section("Hafıza")
+        _section(tr("Hafıza"))
         hist_row = QHBoxLayout()
-        hist_row.addWidget(QLabel("Hatırlanacak konuşma turu:"))
+        hist_row.addWidget(QLabel(tr("Hatırlanacak konuşma turu:")))
         self.hist_spin = QSpinBox()
         self.hist_spin.setRange(0, 20)
         self.hist_spin.setValue(self.settings.get("history_max_turns", 6))
-        self.hist_spin.setToolTip("Son kaç soru-cevap turu modele gönderilir.\n0 = hafıza kapalı.")
+        self.hist_spin.setToolTip(tr("Son kaç soru-cevap turu modele gönderilir.\n0 = hafıza kapalı."))
         hist_row.addWidget(self.hist_spin)
         hist_row.addStretch()
         sl.addLayout(hist_row)
@@ -846,16 +974,27 @@ class SettingsWindow(QWidget):
         # ── Sekme: Tarayıcı Eklentisi ──
         tab_ext = QWidget()
         ext_layout = QVBoxLayout(tab_ext)
-        ext_info = QLabel(
+        _ext_tr = (
             "<b>Linux AI Asistan - Tarayıcı Eklentisi Kurulumu</b><br><br>"
             "Eklenti sayesinde Gmail, YouTube, PDF'ler ve tüm web sayfalarını asistanınızla entegre edebilirsiniz.<br><br>"
             "<b>Nasıl Kurulur?</b><br>"
             "1. Chrome, Brave veya Edge tarayıcınızda <code>chrome://extensions/</code> (veya edge://extensions/) sayfasına gidin.<br>"
             "2. Sağ üst köşeden <b>'Geliştirici Modu'</b> (Developer mode) seçeneğini aktifleştirin.<br>"
             "3. Sol üstteki <b>'Paketlenmemiş öge yükle'</b> (Load unpacked) butonuna tıklayın.<br>"
-            "4. Açılan pencerede uygulamanın bulunduğu dosya konumundaki <code>browser_extension</code> klasörünü seçin.<br><br>"
+            "4. Açılan pencerede uygulamanın bulunduğu dosya konumundaki <code>extensions/chrome</code> klasörünü seçin.<br><br>"
             "İşte bu kadar! Eklentiyi uzantılar menüsünden sabitleyip hemen kullanmaya başlayabilirsiniz."
         )
+        _ext_en = (
+            "<b>Linux AI Assistant - Browser Extension Setup</b><br><br>"
+            "With the extension you can integrate Gmail, YouTube, PDFs and all web pages with your assistant.<br><br>"
+            "<b>How to Install?</b><br>"
+            "1. In Chrome, Brave or Edge go to <code>chrome://extensions/</code> (or edge://extensions/).<br>"
+            "2. Enable <b>'Developer mode'</b> in the top right.<br>"
+            "3. Click <b>'Load unpacked'</b> in the top left.<br>"
+            "4. Select the <code>extensions/chrome</code> folder inside the app directory.<br><br>"
+            "That's it! Pin the extension and start using it right away."
+        )
+        ext_info = QLabel(_ext_tr if _APP_LANG == "tr" else _ext_en)
         ext_info.setTextFormat(Qt.TextFormat.RichText)
         ext_info.setStyleSheet("font-size: 13px; line-height: 1.5;")
         ext_info.setWordWrap(True)
@@ -863,6 +1002,29 @@ class SettingsWindow(QWidget):
         ext_layout.addWidget(ext_info)
         
         tabs.addTab(tab_ext, tr("Tarayıcı"))
+
+        # ── Sekme: Güncelleme ──
+        tab_upd = QWidget()
+        ul = QVBoxLayout(tab_upd)
+        ul.setContentsMargins(16, 16, 16, 16); ul.setSpacing(10)
+        self.upd_ver_lbl = QLabel(f"Linux AI Assistant v{__version__}")
+        self.upd_ver_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+        ul.addWidget(self.upd_ver_lbl)
+        self.upd_auto_check = QCheckBox(tr("Açılışta güncellemeleri otomatik denetle"))
+        self.upd_auto_check.setChecked(self.settings.get("auto_check_updates", True))
+        ul.addWidget(self.upd_auto_check)
+        upd_btn_row = QHBoxLayout()
+        self.upd_now_btn = QPushButton(tr("Şimdi denetle"))
+        self.upd_now_btn.clicked.connect(self._manual_update_check)
+        upd_btn_row.addWidget(self.upd_now_btn)
+        upd_btn_row.addStretch()
+        ul.addLayout(upd_btn_row)
+        self.upd_status_lbl = QLabel("")
+        self.upd_status_lbl.setStyleSheet("color: #888; font-size: 12px;")
+        self.upd_status_lbl.setWordWrap(True)
+        ul.addWidget(self.upd_status_lbl)
+        ul.addStretch()
+        tabs.addTab(tab_upd, "Güncelleme" if _APP_LANG == "tr" else "Updates")
 
         # ── Alt butonlar ──────────────────────────────────
         btn_row = QHBoxLayout()
@@ -892,14 +1054,14 @@ class SettingsWindow(QWidget):
             self.cli_model_combo.addItems(models)
             self.cli_model_combo.setEnabled(True)
         else:
-            self.cli_model_combo.setPlaceholderText("Bu araç model seçimi desteklemiyor")
+            self.cli_model_combo.setPlaceholderText(tr("Bu araç model seçimi desteklemiyor"))
             self.cli_model_combo.setEnabled(False)
 
     def _browse_workspace(self):
         """Dizin seçici açıp workspace path'i doldurur."""
         current = self.workspace_input.text().strip() or ""
         directory = QFileDialog.getExistingDirectory(
-            self, "Çalışma Alanı Seç", current or "/home"
+            self, tr("Çalışma Alanı Seç"), current or "/home"
         )
         if directory:
             self.workspace_input.setText(directory)
@@ -908,7 +1070,7 @@ class SettingsWindow(QWidget):
         s = self.settings
         
         current_hk = self.hotkey_input.text().strip()
-        if "Tuşlara basın" not in current_hk:
+        if "Tuşlara basın" not in current_hk and "Press keys" not in current_hk:
             s.set("hotkey", current_hk)
             
         s.set("overlay_position",        self.pos_combo.currentData())
@@ -942,6 +1104,7 @@ class SettingsWindow(QWidget):
         s.set("require_confirm_on_tool",  self.tool_confirm_check.isChecked())
         s.set("tool_max_iterations",      self.tool_iter_spin.value())
         s.set("history_max_turns",        self.hist_spin.value())
+        s.set("auto_check_updates",       self.upd_auto_check.isChecked())
 
         if self.hotkey_manager:
             self.hotkey_manager.update_hotkey(s.get("hotkey"))
@@ -970,6 +1133,10 @@ class AppManager:
         self.settings = SettingsManager()
         global _APP_LANG
         _APP_LANG = self.settings.get("app_language", "tr")
+        try:
+            set_core_lang(_APP_LANG)
+        except Exception:
+            pass
 
         self._is_listening = False
         self._last_hotkey_time = 0
@@ -988,6 +1155,7 @@ class AppManager:
         self.comm.ask_show_response.connect(self._ask_show_response_gui, Q)
         self.comm.ask_clipboard.connect(self._ask_clipboard_gui, Q)
         self.comm.show_response.connect(self._show_response_gui, Q)
+        self.comm.update_checked.connect(self._on_update_checked, Q)
         self.waveform     = WaveformWidget(self.settings)
         self.overlay      = OverlayWindow(self.settings, self.waveform)
         
@@ -1003,7 +1171,7 @@ class AppManager:
         
         # Extension Server Başlat (Tarayıcı eklentisinden veri almak için)
         try:
-            from extension_server import start_server, signals as ext_signals
+            from src.context.server import start_server, signals as ext_signals
             self.ext_server = start_server()
             ext_signals.data_received.connect(self._on_extension_data, Q)
             # browser_action tool'u için göndericiyi Router → LLMClient zincirine enjekte et
@@ -1014,6 +1182,127 @@ class AppManager:
         
         self._setup_tray()
         self._is_listening = False
+        # Açılışta sessiz güncelleme denetimi (arka planda, ayara bağlı)
+        if self.settings.get("auto_check_updates", True):
+            threading.Thread(target=self._check_updates_bg, args=(True,), daemon=True).start()
+
+    def _check_updates_bg(self, silent):
+        try:
+            info = updater.check_for_updates()
+        except Exception as e:
+            info = {"ok": False, "error": str(e), "update_available": False}
+        self.comm.update_checked.emit(info, silent)
+
+    def _on_update_checked(self, info, silent):
+        """Güncelleme denetimi sonucu (ana thread). Sessiz modda sadece
+        yeni + atlanmamış sürümde diyalog açar; manuel modda her sonucu bildirir."""
+        if not isinstance(info, dict):
+            return
+        if info.get("update_available"):
+            tag = info.get("tag", "") or f"v{info.get('latest_version', '')}"
+            if silent and self.settings.get("skipped_update_version", "") == tag:
+                return  # Kullanıcı bu sürümü atlamış
+            self._show_update_dialog(info)
+        elif not silent:
+            if info.get("ok"):
+                self.tray.showMessage("Linux-AI-Assistant",
+                                      f"{tr('Kullanılabilir güncelleme yok.')} (v{__version__})",
+                                      QSystemTrayIcon.MessageIcon.Information, 4000)
+            else:
+                self.tray.showMessage("Linux-AI-Assistant", tr("Güncelleme denetimi başarısız."),
+                                      QSystemTrayIcon.MessageIcon.Warning, 4000)
+
+    def _show_update_dialog(self, info):
+        from PyQt6.QtWidgets import QTextBrowser
+        latest = info.get("latest_version", "?")
+        current = info.get("current_version", __version__)
+        notes = (info.get("release_notes", "") or "").strip()
+        if len(notes) > 4000:
+            notes = notes[:4000] + "\n…"
+        dlg = QDialog()
+        dlg.setWindowTitle(f"{tr('Yeni sürüm mevcut')}: v{latest}")
+        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        dlg.resize(520, 420)
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        title = QLabel(f"<b>v{current} → v{latest}</b>")
+        title.setStyleSheet("font-size: 14px;")
+        layout.addWidget(title)
+        browser = QTextBrowser()
+        browser.setMarkdown(notes if notes else "(release notes yok)")
+        browser.setOpenExternalLinks(True)
+        layout.addWidget(browser)
+        self._upd_status_lbl = QLabel("")
+        self._upd_status_lbl.setWordWrap(True)
+        self._upd_status_lbl.setStyleSheet("color: #888; font-size: 12px;")
+        layout.addWidget(self._upd_status_lbl)
+        btn_row = QHBoxLayout()
+        btn_page = QPushButton(tr("Release Sayfasını Aç"))
+        btn_page.clicked.connect(lambda: __import__("webbrowser").open(info.get("html_url", updater.HTML_RELEASES)))
+        btn_skip = QPushButton(tr("Bu Sürümü Atla"))
+        btn_later = QPushButton(tr("Daha Sonra"))
+        btn_now = QPushButton(tr("Şimdi Güncelle"))
+        btn_now.setDefault(True)
+        btn_row.addWidget(btn_page)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_skip)
+        btn_row.addWidget(btn_later)
+        btn_row.addWidget(btn_now)
+        layout.addLayout(btn_row)
+
+        def _do_skip():
+            self.settings.set("skipped_update_version", info.get("tag", "") or f"v{latest}")
+            dlg.reject()
+
+        def _do_update():
+            for b in (btn_page, btn_skip, btn_later, btn_now):
+                b.setEnabled(False)
+            self._upd_status_lbl.setText(tr("Güncelleniyor, lütfen bekleyin..."))
+
+            def _bg():
+                try:
+                    res = updater.perform_update(PROJECT_ROOT)
+                except Exception as e:
+                    res = {"ok": False, "restart_needed": False, "message": str(e)}
+                QTimer.singleShot(0, lambda: _after_update(res, dlg))
+
+            threading.Thread(target=_bg, daemon=True).start()
+
+        btn_skip.clicked.connect(_do_skip)
+        btn_later.clicked.connect(dlg.reject)
+        btn_now.clicked.connect(_do_update)
+        dlg.exec()
+
+    def _after_update(self, res, dlg):
+        if res.get("ok") and res.get("restart_needed"):
+            self.settings.set("skipped_update_version", "")
+            ans = QMessageBox.question(
+                dlg, "Linux-AI-Assistant",
+                f"{res.get('message', '')}\n\n{tr('Güncelleme tamamlandı. Yeniden başlatılsın mı?')}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            dlg.accept()
+            if ans == QMessageBox.StandardButton.Yes:
+                self._restart_app()
+        elif res.get("ok"):
+            QMessageBox.information(dlg, "Linux-AI-Assistant", res.get("message", ""))
+            dlg.accept()
+        else:
+            if hasattr(self, "_upd_status_lbl"):
+                self._upd_status_lbl.setText(res.get("message", ""))
+            # Diyalog açık kalır; kullanıcı Release sayfasından manuel indirebilir.
+
+    def _restart_app(self):
+        """Aynı Python yorumlayıcısıyla app.py'yi yeniden başlatır."""
+        import subprocess
+        import sys as _sys
+        app_entry = os.path.join(PROJECT_ROOT, "app.py")
+        try:
+            os.execv(_sys.executable, [_sys.executable, app_entry] + _sys.argv[1:])
+        except Exception:
+            self._quit()
+            subprocess.Popen([_sys.executable, app_entry])
 
     def _on_extension_data(self, data):
         """Tarayıcı eklentisinden veri geldiğinde tetiklenir."""
@@ -1040,19 +1329,19 @@ class AppManager:
         # Zaten dinleniyorsa veya yeni uyandıysa bilgilendirme geç
         if getattr(self, '_is_listening', False):
             if data.get('selection'):
-                self.comm.update_text.emit("Seçili metin eklendi")
+                self.comm.update_text.emit(tr("Seçili metin eklendi"))
             elif "youtube.com/watch" in data.get('url', '') or "youtu.be/" in data.get('url', ''):
-                self.comm.update_text.emit("Video eklendi")
+                self.comm.update_text.emit(tr("Video eklendi"))
             elif data.get('url', '').lower().endswith('.pdf') or data.get('contentType') == 'application/pdf':
-                self.comm.update_text.emit("PDF belgesi eklendi")
+                self.comm.update_text.emit(tr("PDF belgesi eklendi"))
             elif "mail.google.com" in data.get('url', ''):
-                self.comm.update_text.emit("E-posta eklendi")
+                self.comm.update_text.emit(tr("E-posta eklendi"))
             else:
-                self.comm.update_text.emit("Tarayıcı sekmesi eklendi")
+                self.comm.update_text.emit(tr("Tarayıcı sekmesi eklendi"))
             
             def _reset_text():
                 if getattr(self, '_is_listening', False):
-                    self.comm.update_text.emit("Seni dinliyorum...")
+                    self.comm.update_text.emit(tr("Seni dinliyorum..."))
                     
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(5000, _reset_text)
@@ -1076,7 +1365,7 @@ class AppManager:
         p.end()
 
         self.tray = QSystemTrayIcon(QIcon(pix), self.app)
-        self.tray.setToolTip("Linux-AI-Assistant\nSağ tıkla → Menü\nSol tıkla → Ayarlar")
+        self.tray.setToolTip("Linux-AI-Assistant\nSağ tıkla → Menü\nSol tıkla → Ayarlar" if _APP_LANG == "tr" else "Linux-AI-Assistant\nRight-click → Menu\nLeft-click → Settings")
         
         def tray_clicked(reason):
             if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -1089,8 +1378,13 @@ class AppManager:
         act_s.triggered.connect(lambda: (self.settings_win.show(), self.settings_win.raise_()))
         menu.addAction(act_s)
         menu.addSeparator()
-        act_h = QAction("Hafızayı Temizle", self.app)
-        act_h.setToolTip("Yapay zekanın hatırladığı konuşma geçmişini siler.")
+        act_u = QAction(tr("Güncellemeleri Denetle"), self.app)
+        act_u.triggered.connect(lambda: threading.Thread(
+            target=self._check_updates_bg, args=(False,), daemon=True).start())
+        menu.addAction(act_u)
+        menu.addSeparator()
+        act_h = QAction(tr("Hafızayı Temizle"), self.app)
+        act_h.setToolTip(tr("Yapay zekanın hatırladığı konuşma geçmişini siler."))
         act_h.triggered.connect(self._clear_history)
         menu.addAction(act_h)
         menu.addSeparator()
@@ -1102,7 +1396,7 @@ class AppManager:
 
     def _clear_history(self):
         self.router.llm.clear_history()
-        self.tray.showMessage("Linux-AI-Assistant", "Konuşma geçmişi temizlendi.",
+        self.tray.showMessage("Linux-AI-Assistant", tr("Konuşma geçmişi temizlendi."),
                               QSystemTrayIcon.MessageIcon.Information, 3000)
 
     def _check_single_instance(self):
@@ -1126,9 +1420,9 @@ class AppManager:
             else:
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Icon.Warning)
-                msg.setWindowTitle("Uygulama Zaten Çalışıyor")
-                msg.setText("Linux-AI-Assistant şu anda arka planda zaten açık!")
-                msg.setInformativeText("Lütfen sağ alt köşedeki (Sistem Çekmecesi) ikona sağ tıklayıp işlem yapın. Kapatmak için Çıkış'a basabilirsiniz.\n\nEğer asistanı manuel tetiklemek istiyorsanız '--trigger' argümanı ile çalıştırın.")
+                msg.setWindowTitle(tr("Uygulama Zaten Çalışıyor"))
+                msg.setText(tr("Linux-AI-Assistant şu anda arka planda zaten açık!"))
+                msg.setInformativeText("Lütfen sağ alt köşedeki (Sistem Çekmecesi) ikona sağ tıklayıp işlem yapın. Kapatmak için Çıkış'a basabilirsiniz.\n\nEğer asistanı manuel tetiklemek istiyorsanız '--trigger' argümanı ile çalıştırın." if _APP_LANG == "tr" else "Right-click the system tray icon to use it, or Exit to close it.\n\nTo trigger the assistant manually, run with the '--trigger' argument.")
                 msg.exec()
                 sys.exit(0)
 
@@ -1191,21 +1485,21 @@ class AppManager:
                 return
 
             if not text:
-                self.comm.update_text.emit("Ses algılanamadı.")
+                self.comm.update_text.emit(tr("Ses algılanamadı."))
                 time.sleep(1.8)
                 self.comm.hide_overlay.emit()
                 self._is_listening = False
                 return
 
             # Sesi aldık, önce bunu göster
-            self.comm.update_text.emit("Ses Kaydı Alındı.")
+            self.comm.update_text.emit(tr("Ses Kaydı Alındı."))
             time.sleep(0.6) # Yarım saniye kadar göster
             
             if not self._is_listening:
                 return
                 
             if self.settings.get("optimize_dictation", False):
-                self.comm.update_text.emit("Akıllı Dikte Düzeltici Çalışıyor...")
+                self.comm.update_text.emit(tr("Akıllı Dikte Düzeltici Çalışıyor..."))
                 opt_system = (
                     "Sen sadece metin düzelten ve iyileştiren bir araçsın. Asla yoruma, kendi fikirlerine, 'Hemen yapıyorum', 'Harika' gibi laflara veya açıklamalara yer vermezsin. "
                     "Kullanıcının verdiği metni, komut veya sohbet formatına uygun en temiz ve pürüzsüz hale getir. YALNIZCA düzeltilmiş metni yaz."
@@ -1264,9 +1558,9 @@ class AppManager:
                     screen_text = ""
 
                     if wants_screen:
-                        self.comm.update_text.emit("Ekran Okunuyor (OCR)...")
+                        self.comm.update_text.emit(tr("Ekran Okunuyor (OCR)..."))
                         try:
-                            from ai_tools import read_screen_via_ocr
+                            from src.tools.executor import read_screen_via_ocr
                             screen_text = read_screen_via_ocr()
                         except Exception as e:
                             logger.error(f"OCR Hatası: {e}")
@@ -1290,7 +1584,7 @@ class AppManager:
                             from youtube_transcript_api import YouTubeTranscriptApi
                             import urllib.parse as urlparse
                             
-                            self.comm.update_text.emit("Video Altyazısı Okunuyor...")
+                            self.comm.update_text.emit(tr("Video Altyazısı Okunuyor..."))
                             
                             video_id = None
                             if "youtu.be/" in yt['url']:
@@ -1330,7 +1624,7 @@ class AppManager:
                         is_pdf = yt['url'] and (yt['url'].lower().endswith('.pdf') or yt.get('contentType') == 'application/pdf')
                         
                         if is_pdf:
-                            self.comm.update_text.emit("PDF İçeriği Okunuyor...")
+                            self.comm.update_text.emit(tr("PDF İçeriği Okunuyor..."))
                             try:
                                 pdf_path = None
                                 import urllib.parse
@@ -1444,8 +1738,8 @@ class AppManager:
     def _ask_confirm_gui(self, summary, result_list, event):
         """Sade onay penceresi: başlık + tek soru + küçük detay."""
         if isinstance(summary, str):
-            summary = {"title": "Onay", "question": summary}
-        title = summary.get("title") or "Onay"
+            summary = {"title": tr("Onay"), "question": summary}
+        title = summary.get("title") or tr("Onay")
         question = summary.get("question") or ""
         detail = summary.get("detail")
 
@@ -1457,11 +1751,11 @@ class AppManager:
     def _ask_show_response_gui(self, result_list, event):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle("Yanıtı Göster")
-        msg.setText("Yapay zeka işlemini tamamladı ve size bir yanıt vermek istiyor.")
-        msg.setInformativeText("Cevabı ekranda görmek istiyor musunuz?")
-        btn_yes = msg.addButton("Evet", QMessageBox.ButtonRole.YesRole)
-        btn_no = msg.addButton("Hayır", QMessageBox.ButtonRole.NoRole)
+        msg.setWindowTitle(tr("Yanıtı Göster"))
+        msg.setText(tr("Yapay zeka işlemini tamamladı ve size bir yanıt vermek istiyor."))
+        msg.setInformativeText(tr("Cevabı ekranda görmek istiyor musunuz?"))
+        btn_yes = msg.addButton(tr("Evet"), QMessageBox.ButtonRole.YesRole)
+        btn_no = msg.addButton(tr("Hayır"), QMessageBox.ButtonRole.NoRole)
         msg.setDefaultButton(btn_yes)
         msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 
@@ -1473,11 +1767,11 @@ class AppManager:
     def _ask_clipboard_gui(self, result_list, event, clipboard_text):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle("Bağlam Farkındalığı (Pano ve Ekran Erişimi)")
-        msg.setText("Cümlenizde bağlam gerektiren kelimeler tespit edildi. Yapay zekaya panonuzdaki/ekranınızdaki metin de gönderilsin mi?")
+        msg.setWindowTitle(tr("Bağlam Farkındalığı (Pano ve Ekran Erişimi)"))
+        msg.setText(tr("Cümlenizde bağlam gerektiren kelimeler tespit edildi. Yapay zekaya panonuzdaki/ekranınızdaki metin de gönderilsin mi?"))
         
-        btn_yes = msg.addButton("Evet", QMessageBox.ButtonRole.YesRole)
-        btn_no = msg.addButton("Hayır", QMessageBox.ButtonRole.NoRole)
+        btn_yes = msg.addButton(tr("Evet"), QMessageBox.ButtonRole.YesRole)
+        btn_no = msg.addButton(tr("Hayır"), QMessageBox.ButtonRole.NoRole)
         msg.setDefaultButton(btn_yes)
         msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 
@@ -1528,5 +1822,5 @@ class AppManager:
 
 
 if __name__ == "__main__":
-    manager = AppManager()
-    manager.run()
+    # Doğrudan çalıştırma desteklenmez — proje kökünden `python app.py` kullanın.
+    raise SystemExit("Bu modül doğrudan çalıştırılamaz. Proje kökünde: python app.py")

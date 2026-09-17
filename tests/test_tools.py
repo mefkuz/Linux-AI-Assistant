@@ -1,13 +1,13 @@
-"""Tool Calling birim testleri. Çalıştırma: python3 test_tools.py"""
+"""Tool Calling birim testleri. Çalıştırma: python3 tests/test_tools.py"""
 import json
 import os
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ai_tools import get_openai_tools, ToolExecutor, READ_ONLY_TOOLS, SENSITIVE_READ_TOOLS
-from security import SecurityManager
+from src.tools.executor import get_openai_tools, ToolExecutor, READ_ONLY_TOOLS, SENSITIVE_READ_TOOLS
+from src.core.security import SecurityManager
 
 
 class FakeSettings:
@@ -146,7 +146,7 @@ check("security eski iki-argüman callback ile çalışıyor",
       sm_old.ask_confirmation({"title": "T", "question": "S?", "detail": "D"}) == "eski:S?|D")
 
 # 12. LLMClient tool döngüsü (mock HTTP) ----------------------------------
-from llm_client import LLMClient
+from src.llm.client import LLMClient
 
 
 class FakeResp:
@@ -210,7 +210,7 @@ check("400+tools hatasında tools'suz retry", len(calls) == 2 and "tools" not in
       f"calls={len(calls)} out={out!r}")
 
 # 14. Router bağlantıları --------------------------------------------------
-from router import Router
+from src.llm.router import Router
 r = Router(settings=FakeSettings({}), confirm_callback=lambda summary: True)
 check("Router LLMClient'a callback iletiyor", r.llm.confirm_callback is not None)
 r.set_browser_sender(lambda c: None)
@@ -222,7 +222,7 @@ import unittest.mock as _mock  # noqa: E402 (mock zaten import edildi, tekrar g�
 asked = []
 s = FakeSettings({"auto_allow_clipboard": False})
 ex = ToolExecutor(settings=s, confirm_callback=lambda summary: asked.append(summary) or False)
-with _mock.patch("ai_tools.read_screen_via_ocr", return_value="gizli ekran"):
+with _mock.patch("src.tools.executor.read_screen_via_ocr", return_value="gizli ekran"):
     out = ex.execute_tool("read_screen_text", {})
 check("ekran onayı soruluyor ve red okumayı engelliyor",
       len(asked) == 1 and "izin vermedi" in out.lower() and "gizli" not in out, out)
@@ -234,7 +234,7 @@ check("ekran onayı sade formatta",
 asked_pano = []
 s = FakeSettings({"auto_allow_clipboard": False})
 ex = ToolExecutor(settings=s, confirm_callback=lambda summary: asked_pano.append(summary) or False)
-with _mock.patch("ai_tools.read_clipboard_subprocess", return_value="gizli pano"):
+with _mock.patch("src.tools.executor.read_clipboard_subprocess", return_value="gizli pano"):
     out = ex.execute_tool("get_clipboard_text", {})
 check("pano onayı soruluyor ve red okumayı engelliyor",
       len(asked_pano) == 1 and "izin vermedi" in out.lower() and "gizli" not in out, out)
@@ -243,19 +243,19 @@ check("pano onayı soruluyor ve red okumayı engelliyor",
 s = FakeSettings({"auto_allow_clipboard": True})
 ex = ToolExecutor(settings=s, confirm_callback=lambda summary: (_ for _ in ()).throw(
     AssertionError("onay sorulmamalıydı")))
-with _mock.patch("ai_tools.read_screen_via_ocr", return_value="ekran içeriği"):
+with _mock.patch("src.tools.executor.read_screen_via_ocr", return_value="ekran içeriği"):
     out = ex.execute_tool("read_screen_text", {})
 check("auto_allow açıkken ekran sorulmadan okunuyor", "ekran içeriği" in out, out)
 
 # 17. Hassas okuma: onay verilince içerik LLM'e gidiyor ----------------------
 s = FakeSettings({"auto_allow_clipboard": False})
 ex = ToolExecutor(settings=s, confirm_callback=lambda summary: True)
-with _mock.patch("ai_tools.read_clipboard_subprocess", return_value="panodaki sır"):
+with _mock.patch("src.tools.executor.read_clipboard_subprocess", return_value="panodaki sır"):
     out = ex.execute_tool("get_clipboard_text", {})
 check("onay verilince pano içeriği dönüyor", "panodaki sır" in out, out)
 
 # 18. Özetleyiciler: shell / browser -----------------------------------------
-from ai_tools import TOOL_SUMMARIZERS
+from src.tools.executor import TOOL_SUMMARIZERS
 t, q, d = TOOL_SUMMARIZERS["run_shell_command"]({"command": "ls -la /tmp"})
 check("shell özeti sade", t == "Komut çalıştırılsın mı?" and d == "$ ls -la /tmp", f"{t}|{q}|{d}")
 t, q, d = TOOL_SUMMARIZERS["browser_action"]({"action": "scroll_down"})
@@ -322,7 +322,7 @@ with tempfile.TemporaryDirectory() as ws:
           len(asked_app) == 1 and "reddet" in r.lower(), r)
 
 # 21. Hata mesajı kısaltma --------------------------------------------------
-from llm_client import _short_err
+from src.llm.client import _short_err
 long_html = "<html>" + "x" * 2000 + "</html>"
 short = _short_err(f"HTTP 404: {long_html}")
 check("uzun hata 500 civarında kesiliyor",
@@ -416,7 +416,7 @@ check("clear_history sıfırlıyor", client.history == [])
 
 # 23. Tool loglama (Loglar/) -------------------------------------------------
 import glob as _glob
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Loglar")
+log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Loglar")
 before_logs = set(_glob.glob(os.path.join(log_dir, "araclar-*.md"))) if os.path.isdir(log_dir) else set()
 ex = ToolExecutor(settings=FakeSettings({"workspace_dir": tempfile.gettempdir(),
                                          "require_confirm_on_tool": False,

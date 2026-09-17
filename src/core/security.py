@@ -1,6 +1,7 @@
 import shlex
 import re
 import logging
+from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class SecurityManager:
         try:
             return shlex.split(command_str)
         except ValueError as e:
-            raise ValueError(f"Geçersiz komut sözdizimi: {e}")
+            raise ValueError(tr("Geçersiz komut sözdizimi: {e}").format(e=e))
 
     def requires_confirmation(self, tokens, allow_sudo=False):
         if not tokens:
@@ -52,12 +53,12 @@ class SecurityManager:
         """
         if isinstance(summary, str):
             summary = {
-                "title": "Komut çalıştırılsın mı?",
-                "question": "Şu komut çalıştırılacak:",
+                "title": tr("Komut çalıştırılsın mı?"),
+                "question": tr("Şu komut çalıştırılacak:"),
                 "detail": summary if summary else (explanation or None),
             }
 
-        title = summary.get("title") or "Onay"
+        title = summary.get("title") or tr("Onay")
         question = summary.get("question") or ""
         detail = summary.get("detail")
 
@@ -76,12 +77,12 @@ class SecurityManager:
         # Fallback: terminal (remember burada desteklenmez, her seferinde sorulur)
         while True:
             try:
-                prompt = f"\n[GÜVENLİK] {title}\n"
+                prompt = f"\n[{tr("GÜVENLİK")}] {title}\n"
                 if question:
                     prompt += f"{question}\n"
                 if detail:
-                    prompt += f"Detay: {detail}\n"
-                prompt += "Onaylıyor musunuz? (y/n): "
+                    prompt += tr("Detay: ") + f"{detail}\n"
+                prompt += tr("Onaylıyor musunuz? (y/n): ")
                 resp = input(prompt).strip().lower()
                 if resp in ('y', 'yes'):
                     return True

@@ -14,6 +14,13 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 - **Universal Linux Support:** The installer handles dependencies seamlessly across Arch, Debian/Ubuntu, Fedora, and openSUSE.
 - **Flexible LLM Integration:** Connect to local models (e.g., LM Studio, Ollama), remote APIs (e.g., Groq, OpenAI, OpenRouter), or CLI-based AI tools.
 - **Bilingual Interface:** Supports both English and Turkish application languages out of the box.
+- **Auto-Updates (NEW!):** Checks GitHub Releases on startup, shows release notes, and updates with one click (fast-forward `git pull` + dependency refresh).
+
+## Updates
+
+On startup the app quietly checks the [latest GitHub Release](https://github.com/mefkuz/Linux-AI-Assistant/releases/latest). When a newer version exists, a dialog shows the **release notes** with options: **Update Now**, **Later**, or **Skip This Version**. "Update Now" runs a fast-forward `git pull`, refreshes Python dependencies, and offers to restart. You can also check manually via **Tray menu → Check for Updates** or **Settings → Updates**, or disable the startup check there.
+
+Notes for non-git installs (ZIP download): in-place update isn't possible — the dialog's **Open Release Page** button takes you to the manual download instead.
 
 ## Tool Calling
 
@@ -53,11 +60,11 @@ The extension talks to the app over `http://127.0.0.1:8765` (local only, never l
 1. Navigate to `chrome://extensions/` (or `edge://extensions/`) in your browser.
 2. Enable **Developer mode** in the top right.
 3. Click **Load unpacked** in the top left.
-4. Select the `browser_extension` folder located inside this repository.
+4. Select the `extensions/chrome` folder located inside this repository.
 5. Pin the microphone icon to your toolbar!
 
 **Installation (Firefox):**
-🚧 Work in progress — a separate Firefox build lives in `browser_extension_firefox/`, but it is not yet stable. Tracked for a future release.
+🚧 Work in progress — a separate Firefox build lives in `extensions/firefox/`, but it is not yet stable. Tracked for a future release.
 
 ## Screenshots
 
@@ -65,9 +72,9 @@ The extension talks to the app over `http://127.0.0.1:8765` (local only, never l
 
 When triggered via your custom global hotkey, the minimal listening overlay appears. It provides visual waveform feedback for your voice and auto-closes when the interaction is finished.
 
-![Listening Overlay](screenshots/listining.png)
+![Listening Overlay](docs/screenshots/listening-overlay.png)
 
-![Waiting for AI](screenshots/waiting%20for%20AI%20Response.png)
+![Waiting for AI](docs/screenshots/waiting-response.png)
 
 ### Configuration & Settings
 
@@ -75,19 +82,19 @@ Linux AI Assistant is highly customizable, putting the control entirely in your 
 
 **General Settings**
 Configure your global hotkey and choose the application language.
-![General Settings](screenshots/general%20settings.png)
+![General Settings](docs/screenshots/general-settings.png)
 
 **Listening & Overlay Settings**
 Fine-tune microphone sensitivity, pause detection thresholds, and the physical position of the overlay.
-![Listening Settings](screenshots/Listening%20settings.png)
+![Listening Settings](docs/screenshots/listening-settings.png)
 
 **AI & API Configuration**
 Easily switch between local AI instances, remote APIs, and command-line LLM tools.
-![AI Settings](screenshots/AI%20Settings.png)
+![AI Settings](docs/screenshots/ai-settings.png)
 
 **Security & Advanced Settings**
 Control the permissions of the AI: automatic popup responses, dictation optimization, screen/clipboard reading permissions, Tool Calling toggles, and conversation memory size.
-![Security Settings](screenshots/security%20setting.png)
+![Security Settings](docs/screenshots/security-settings.png)
 
 ## Installation
 
@@ -101,27 +108,36 @@ The project includes an intelligent installer script that automatically detects 
 
 2. Make the installer executable and run it:
    ```bash
-   chmod +x install.sh
-   ./install.sh
+   chmod +x scripts/install.sh
+   ./scripts/install.sh
    ```
 
 3. Launch the application:
    You can find **Linux-AI-Assistant** in your application launcher, or start it directly from the terminal:
    ```bash
-   ./venv/bin/python gui_main.py
+   ./venv/bin/python app.py
+   ```
+   For a terminal-only chat session without the GUI:
+   ```bash
+   ./venv/bin/python main.py
+   ```
+
+4. (Optional) Run the test suite:
+   ```bash
+   python3 tests/test_tools.py
    ```
 
 ### 🎯 Wayland & Global Hotkeys
 If you are using a modern Wayland compositor (like GNOME Wayland or Hyprland), traditional global hotkeys (via pynput) might be blocked by the OS for security reasons.
 You can easily bypass this by mapping a custom keyboard shortcut in your OS settings to the following command:
 ```bash
-/path/to/Linux-AI-Assistant/venv/bin/python /path/to/Linux-AI-Assistant/gui_main.py --trigger
+/path/to/Linux-AI-Assistant/venv/bin/python /path/to/Linux-AI-Assistant/app.py --trigger
 ```
 This safely signals the background process to instantly wake up and start listening, making it 100% compatible with any Linux environment!
 
 ## Requirements & Dependencies
 
-The `install.sh` script installs these automatically depending on your distribution (pacman, apt, dnf, or zypper):
+The `scripts/install.sh` script installs these automatically depending on your distribution (pacman, apt, dnf, or zypper):
 - Python 3.10+
 - `portaudio` (for PyAudio)
 - `tesseract` & `tesseract-ocr` language packs (for screen context reading)
@@ -134,6 +150,27 @@ The `install.sh` script installs these automatically depending on your distribut
 - **You are in control:** The system prompt is fully exposed in the settings, allowing you to explicitly define how the AI behaves and what rules it follows.
 - **Permission checks:** Screen/clipboard reading asks for confirmation every time unless explicitly allowed; dangerous shell commands always require confirmation; file tools are jailed to the workspace directory.
 - **Local-only browser bridge:** The extension communicates over `127.0.0.1` only — page contents never leave your machine except to your chosen LLM API.
+
+## Project Structure
+
+```
+Linux-AI-Assistant/
+├── app.py              # GUI entry point (overlay, settings, tray)
+├── main.py             # Terminal-only chat session (no GUI)
+├── src/                # Application code
+│   ├── gui/            # Overlay UI, settings window, waveform
+│   ├── audio/          # Microphone listener, global hotkeys
+│   ├── llm/            # Router, API client, CLI tools
+│   ├── tools/          # Tool Calling schemas + executor
+│   ├── context/        # Active-window context, extension bridge (:8765)
+│   └── core/           # Settings, security, i18n, updater, version
+├── extensions/         # Browser extensions (chrome/ + firefox WIP)
+├── tests/              # test_tools.py, test_updater.py + manual/ sandbox scripts
+├── scripts/            # install.sh
+└── docs/screenshots/   # README images
+```
+
+Runtime files created next to the code (`settings.json`, `Loglar/`, `venv/`) are git-ignored and stay in the project root, so updating never touches your data.
 
 ## Contributing
 

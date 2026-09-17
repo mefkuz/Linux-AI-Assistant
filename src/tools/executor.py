@@ -2,7 +2,7 @@
 OpenAI-formatında Tool Calling desteği için araç tanımları ve çalıştırıcı.
 
 Kullanım:
-    from ai_tools import get_openai_tools, ToolExecutor
+    from src.tools.executor import get_openai_tools, ToolExecutor
 
     executor = ToolExecutor(settings=settings, confirm_callback=cb)
     result_text = executor.execute_tool("read_file", '{"path": "/tmp/x.txt"}')
@@ -22,7 +22,8 @@ import shutil
 import subprocess
 import time
 
-from security import SecurityManager
+from src.core.security import SecurityManager
+from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -46,37 +47,37 @@ SENSITIVE_READ_TOOLS = {
 def _summarize_shell(args):
     cmd = (args.get("command") or "").strip()
     short = cmd if len(cmd) <= 80 else cmd[:80] + "…"
-    return ("Komut çalıştırılsın mı?", "Şu komut çalıştırılacak:", f"$ {short}")
+    return (tr("Komut çalıştırılsın mı?"), tr("Şu komut çalıştırılacak:"), f"$ {short}")
 
 
 def _summarize_write(args):
     path = (args.get("path") or "").strip()
     size = len(args.get("content", ""))
-    return ("Dosya yazılsın mı?", f"Şu dosyaya yazılacak ({size} karakter):", path)
+    return (tr("Dosya yazılsın mı?"), tr("Şu dosyaya yazılacak ({size} karakter):").format(size=size), path)
 
 
 def _summarize_append(args):
     path = (args.get("path") or "").strip()
     size = len(args.get("content", ""))
-    return ("Dosyaya eklensin mi?", f"Şu dosyanın sonuna eklenecek ({size} karakter):", path)
+    return (tr("Dosyaya eklensin mi?"), tr("Şu dosyanın sonuna eklenecek ({size} karakter):").format(size=size), path)
 
 
 def _summarize_browser(args):
     action = (args.get("action") or "").strip()
     labels = {
-        "close_tab": "açık sekmeyi kapatmak",
-        "scroll_down": "sayfayı aşağı kaydırmak",
-        "scroll_up": "sayfayı yukarı kaydırmak",
-        "fill_form": "forma metin yazmak",
-        "new_tab": "yeni sekme açmak",
+        "close_tab": tr("açık sekmeyi kapatmak"),
+        "scroll_down": tr("sayfayı aşağı kaydırmak"),
+        "scroll_up": tr("sayfayı yukarı kaydırmak"),
+        "fill_form": tr("forma metin yazmak"),
+        "new_tab": tr("yeni sekme açmak"),
     }
-    what = labels.get(action, f"'{action}' işlemini yapmak")
+    what = labels.get(action, tr("'{action}' işlemini yapmak").format(action=action))
     detail = None
     if args.get("text"):
-        detail = f"Yazılacak metin: {(args['text'][:100] + '…') if len(args['text']) > 100 else args['text']}"
+        detail = tr("Yazılacak metin: ") + ((args["text"][:100] + "…") if len(args["text"]) > 100 else args["text"])
     elif args.get("url"):
-        detail = f"Adres: {args['url']}"
-    return ("Tarayıcıda işlem yapılsın mı?", f"Yapay zeka {what} istiyor.", detail)
+        detail = tr("Adres: ") + args["url"]
+    return (tr("Tarayıcıda işlem yapılsın mı?"), tr("Yapay zeka {what} istiyor.").format(what=what), detail)
 
 
 TOOL_SUMMARIZERS = {
@@ -97,7 +98,7 @@ def truncate_error(text, limit=500):
     text = str(text or "")
     if len(text) <= limit:
         return text
-    return text[:limit] + f"\n... (hata mesajı çok uzun, {len(text) - limit} karakter kesildi)"
+    return text[:limit] + tr("\n... (hata mesajı çok uzun, {n} karakter kesildi)").format(n=len(text) - limit)
 
 
 # ──────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ def get_openai_tools():
 
 
 # ──────────────────────────────────────────────────────────
-#  Yardımcılar (gui_main'den refactor edildi)
+#  Yardımcılar (GUI katmanından refactor edildi)
 # ──────────────────────────────────────────────────────────
 
 def _ocr_image(png_path, txt_base):
@@ -374,7 +375,7 @@ class ToolExecutor:
         real = os.path.realpath(abs_path)
         if real != ws and not real.startswith(ws + os.sep):
             raise ValueError(
-                f"Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws})."
+                tr("Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws}).").format(path=path, ws=ws)
             )
         return real
 
@@ -390,26 +391,24 @@ class ToolExecutor:
             args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
         except (json.JSONDecodeError, TypeError) as e:
             self._log_tool_call(name, arguments, "json-hatası")
-            return f"Araç argümanı JSON olarak çözümlenemedi: {e}"
+            return tr("Araç argümanı JSON olarak çözümlenemedi: {e}").format(e=e)
 
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
             self._log_tool_call(name, args, "bilinmeyen-araç")
-            return f"Bilinmeyen araç: '{name}'."
+            return tr("Bilinmeyen araç: '{name}'.").format(name=name)
 
         # Onay kontrolü (üç katman):
         # 1. Hassas okuma (ekran/pano): auto_allow_clipboard kapalıyken her seferinde sor.
         if name in SENSITIVE_READ_TOOLS:
             auto_allow = self.settings.get("auto_allow_clipboard", False) if self.settings else False
             if not auto_allow:
-                title, question = SENSITIVE_READ_TOOLS[name]
+                _t, _q = SENSITIVE_READ_TOOLS[name]
+                title, question = tr(_t), tr(_q)
                 summary = {"title": title, "question": question}
                 if not self.security.ask_confirmation(summary):
                     self._log_tool_call(name, args, "kullanıcı-reddetti")
-                    return (
-                        "Kullanıcı bu okuma işlemine izin vermedi. "
-                        "Ekran/pano içeriğini görmeden, genel bilgiyle cevapla."
-                    )
+                    return tr("Kullanıcı bu okuma işlemine izin vermedi. Ekran/pano içeriğini görmeden, genel bilgiyle cevapla.")
         # 2. Yazma/çalıştırma: require_confirm_on_tool ayara bağlı.
         elif name not in READ_ONLY_TOOLS and self._require_confirm():
             summarizer = TOOL_SUMMARIZERS.get(name)
@@ -417,30 +416,31 @@ class ToolExecutor:
                 title, question, detail = summarizer(args)
                 summary = {"title": title, "question": question, "detail": detail}
             else:
-                summary = f"Araç: {name}\nArgüman: {json.dumps(args, ensure_ascii=False)[:500]}"
+                summary = tr("Araç: ") + f"{name}\n" + tr("Argüman: ") + json.dumps(args, ensure_ascii=False)[:500]
             if not self.security.ask_confirmation(summary):
                 self._log_tool_call(name, args, "kullanıcı-reddetti")
-                return "Kullanıcı bu işlemi reddetti. İşlem yapılmadı."
+                return tr("Kullanıcı bu işlemi reddetti. İşlem yapılmadı.")
 
         try:
             result = handler(args)
             status = "tamam"
         except Exception as e:
             logger.error(f"Araç hatası ({name}): {e}")
-            result = f"Araç çalıştırılırken hata ({name}): {e}"
+            result = tr("Araç çalıştırılırken hata ({name}): {e}").format(name=name, e=e)
             status = "hata"
         finally:
             self._log_tool_call(name, args, status)
 
         result = str(result)
         if len(result) > MAX_TOOL_OUTPUT_CHARS:
-            result = result[:MAX_TOOL_OUTPUT_CHARS] + "\n... (çıktı çok uzun olduğu için kesildi)"
+            result = result[:MAX_TOOL_OUTPUT_CHARS] + tr("\n... (çıktı çok uzun olduğu için kesildi)")
         return result
 
     def _log_tool_call(self, name, arguments, status):
         """Her araç çağrısını Loglar/araçlar-YYYY-MM-DD.md dosyasına tek satır yazar."""
         try:
-            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Loglar")
+            from src.core.settings import PROJECT_ROOT
+            log_dir = os.path.join(PROJECT_ROOT, "Loglar")
             os.makedirs(log_dir, exist_ok=True)
             day = time.strftime("%Y-%m-%d")
             arg_str = json.dumps(arguments, ensure_ascii=False)[:300] if isinstance(arguments, dict) else str(arguments)[:300]
@@ -455,9 +455,9 @@ class ToolExecutor:
     def _tool_run_shell_command(self, args):
         command = (args.get("command") or "").strip()
         if not command:
-            return "Hata: 'command' parametresi boş."
+            return tr("Hata: 'command' parametresi boş.")
         # CLIExecutor kendi güvenlik katmanını uygular (çifte koruma).
-        from cli_executor import CLIExecutor
+        from src.llm.cli import CLIExecutor
         executor = CLIExecutor(settings=self.settings,
                                confirm_callback=self.security.confirm_callback)
         res = executor.execute(command)
@@ -467,49 +467,49 @@ class ToolExecutor:
         if res["stderr"]:
             out += f"STDERR:\n{res['stderr']}"
         if res["status"] == "cancelled":
-            out += "\nNot: Komut kullanıcı tarafından iptal edildi."
+            out += tr("\nNot: Komut kullanıcı tarafından iptal edildi.")
         return out.strip() or "(çıktı yok)"
 
     def _tool_read_file(self, args):
         path = (args.get("path") or "").strip()
         if not path:
-            return "Hata: 'path' parametresi boş."
+            return tr("Hata: 'path' parametresi boş.")
         real = self._resolve_inside_workspace(path)
         if not os.path.isfile(real):
-            return f"Dosya bulunamadı: '{path}'"
+            return tr("Dosya bulunamadı: '{path}'").format(path=path)
         try:
             with open(real, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read(MAX_TOOL_OUTPUT_CHARS + 1)
         except OSError as e:
-            return f"Dosya okunamadı: {e}"
+            return tr("Dosya okunamadı: {e}").format(e=e)
         if len(content) > MAX_TOOL_OUTPUT_CHARS:
-            content = content[:MAX_TOOL_OUTPUT_CHARS] + "\n... (dosya çok uzun, kesildi)"
+            content = content[:MAX_TOOL_OUTPUT_CHARS] + tr("\n... (dosya çok uzun, kesildi)")
         return f"[{real}]:\n{content}"
 
     def _tool_write_file(self, args):
         path = (args.get("path") or "").strip()
         content = args.get("content", "")
         if not path:
-            return "Hata: 'path' parametresi boş."
+            return tr("Hata: 'path' parametresi boş.")
         real = self._resolve_inside_workspace(path)
         parent = os.path.dirname(real)
         if parent and not os.path.isdir(parent):
             try:
                 os.makedirs(parent, exist_ok=True)
             except OSError as e:
-                return f"Klasör oluşturulamadı: {e}"
+                return tr("Klasör oluşturulamadı: {e}").format(e=e)
         try:
             with open(real, "w", encoding="utf-8") as f:
                 f.write(content)
         except OSError as e:
-            return f"Dosya yazılamadı: {e}"
-        return f"Dosya yazıldı: {real} ({len(content)} karakter)"
+            return tr("Dosya yazılamadı: {e}").format(e=e)
+        return tr("Dosya yazıldı: {real} ({n} karakter)").format(real=real, n=len(content))
 
     def _tool_append_file(self, args):
         path = (args.get("path") or "").strip()
         content = args.get("content", "")
         if not path:
-            return "Hata: 'path' parametresi boş."
+            return tr("Hata: 'path' parametresi boş.")
         real = self._resolve_inside_workspace(path)
         existed = os.path.isfile(real)
         parent = os.path.dirname(real)
@@ -517,53 +517,52 @@ class ToolExecutor:
             try:
                 os.makedirs(parent, exist_ok=True)
             except OSError as e:
-                return f"Klasör oluşturulamadı: {e}"
+                return tr("Klasör oluşturulamadı: {e}").format(e=e)
         try:
             with open(real, "a", encoding="utf-8") as f:
                 f.write(content)
         except OSError as e:
-            return f"Dosyaya eklenemedi: {e}"
-        what = "eklendi" if existed else "oluşturulup yazıldı"
-        return f"Dosyaya {what}: {real} (+{len(content)} karakter)"
+            return tr("Dosyaya eklenemedi: {e}").format(e=e)
+        return (tr("Dosyaya eklendi: {real} (+{n} karakter)") if existed else tr("Dosya oluşturulup yazıldı: {real} (+{n} karakter)")).format(real=real, n=len(content))
 
     def _tool_list_directory(self, args):
         path = (args.get("path") or "").strip()
         real = self._resolve_inside_workspace(path) if path else self._workspace()
         if not os.path.isdir(real):
-            return f"Klasör bulunamadı: '{path or real}'"
+            return tr("Klasör bulunamadı: '{path}'").format(path=path or real)
         try:
             entries = sorted(os.listdir(real))
         except OSError as e:
-            return f"Klasör listelenemedi: {e}"
+            return tr("Klasör listelenemedi: {e}").format(e=e)
         lines = []
         for e in entries[:200]:
             full = os.path.join(real, e)
             lines.append(f"[D] {e}" if os.path.isdir(full) else f"[F] {e}")
         if len(entries) > 200:
-            lines.append(f"... (+{len(entries) - 200} öğe daha)")
-        return f"[{real}] ({len(entries)} öğe):\n" + "\n".join(lines)
+            lines.append(tr("... (+{n} öğe daha)").format(n=len(entries) - 200))
+        return tr("[{real}] ({n} öğe):").format(real=real, n=len(entries)) + "\n" + "\n".join(lines)
 
     def _tool_get_clipboard_text(self, args):
-        # Tool yolunda pano "şimdi" okunur (gui_main'deki önbellek kullanılmaz).
+        # Tool yolunda pano "şimdi" okunur (GUI'deki önbellek kullanılmaz).
         text = read_clipboard_subprocess()
         if not text.strip():
-            return "(Pano boş veya okunamadı)"
-        return f"[Panodaki Metin]:\n{text}"
+            return tr("(Pano boş veya okunamadı)")
+        return tr("[Panodaki Metin]:") + f"\n{text}"
 
     def _tool_read_screen_text(self, args):
         text = read_screen_via_ocr()
         if not text.strip():
-            return "(Ekrandan metin okunamadı)"
-        return f"[Ekrandaki Metin (OCR)]:\n{text}"
+            return tr("(Ekrandan metin okunamadı)")
+        return tr("[Ekrandaki Metin (OCR)]:") + f"\n{text}"
 
     def _tool_get_active_window_context(self, args):
         try:
-            from context_helper import get_active_contexts
+            from src.context.helper import get_active_contexts
         except ImportError as e:
-            return f"Bağlam yardımcısı yüklenemedi: {e}"
+            return tr("Bağlam yardımcısı yüklenemedi: {e}").format(e=e)
         contexts = get_active_contexts()
         if not contexts:
-            return "(Aktif bağlam bulunamadı)"
+            return tr("(Aktif bağlam bulunamadı)")
         lines = []
         for c in contexts:
             detail = f" — {c['detail']}" if c.get("detail") else ""
@@ -573,11 +572,10 @@ class ToolExecutor:
     def _tool_browser_action(self, args):
         action = (args.get("action") or "").strip()
         if not action:
-            return "Hata: 'action' parametresi boş."
+            return tr("Hata: 'action' parametresi boş.")
         if self.browser_sender is None:
             return (
-                "Tarayıcı bağlantısı yok (eklenti sunucusu çalışmıyor). "
-                "Kullanıcıya tarayıcı eklentisini kurmasını hatırlat."
+                tr("Tarayıcı bağlantısı yok (eklenti sunucusu çalışmıyor). Kullanıcıya tarayıcı eklentisini kurmasını hatırlat.")
             )
         command = {"action": action}
         if args.get("text"):
@@ -587,5 +585,5 @@ class ToolExecutor:
         try:
             self.browser_sender(command)
         except Exception as e:
-            return f"Tarayıcı komutu gönderilemedi: {e}"
-        return f"Tarayıcı komutu gönderildi: {action}"
+            return tr("Tarayıcı komutu gönderilemedi: {e}").format(e=e)
+        return tr("Tarayıcı komutu gönderildi: {action}").format(action=action)

@@ -4,7 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+# Proje kökü (src/core/settings.py → .../Linux-AI-Assistant).
+# settings.json ve Loglar/ hep kökte durur; mevcut kullanıcı verisi taşınmadan korunur.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CONFIG_FILE = os.path.join(PROJECT_ROOT, "settings.json")
 
 DEFAULT_SETTINGS = {
     # Genel
@@ -47,6 +50,10 @@ DEFAULT_SETTINGS = {
 
     # Konuşma geçmişi (hafıza)
     "history_max_turns": 6,           # Tutulacak diyalog turu (0 = hafıza kapalı)
+
+    # Güncellemeler
+    "auto_check_updates": True,       # Açılışta GitHub Releases denetimi
+    "skipped_update_version": "",     # "Bu sürümü atla" denilen sürüm etiketi
 
     # Kişiselleştirme
     "auto_show_popup": False,

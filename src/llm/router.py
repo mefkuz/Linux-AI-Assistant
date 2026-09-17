@@ -1,6 +1,7 @@
 import logging
-from cli_executor import CLIExecutor
-from llm_client import LLMClient
+from src.llm.cli import CLIExecutor
+from src.llm.client import LLMClient
+from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +61,19 @@ class Router:
                 use_history=False  # İç analiz: geçmişe yazma, bağlam şişirmesin
             )
             return (
-                f"\n--- KOMUT ÇIKTISI ---\n{cli_result['stdout']}{cli_result['stderr']}"
-                f"\n--- YAPAY ZEKA ---\n{analysis}"
+                f"\n--- {tr("KOMUT ÇIKTISI")} ---\n{cli_result['stdout']}{cli_result['stderr']}"
+                f"\n--- {tr("YAPAY ZEKA")} ---\n{analysis}"
             )
         except Exception as e:
             # LLM yoksa sadece ham çıktıyı döndür, hata verme
             logger.warning(f"LLM analizi atlandı: {e}")
-            raw = cli_result['stdout'] or cli_result['stderr'] or "(çıktı yok)"
-            return f"\n--- KOMUT ÇIKTISI ---\n{raw}"
+            raw = cli_result['stdout'] or cli_result['stderr'] or tr("(çıktı yok)")
+            return f"\n--- {tr("KOMUT ÇIKTISI")} ---\n{raw}"
 
     def parse_and_route(self, user_input, context=None):
         user_input = user_input.strip()
         if not user_input:
-            return "Boş girdi alındı."
+            return tr("Boş girdi alındı.")
 
         tokens   = user_input.split()
         base_cmd = tokens[0]
@@ -99,7 +100,6 @@ class Router:
                 )
             except Exception as e:
                 logger.warning(f"LLM yanıt hatası: {e}")
-                return (
-                    f"Yapay zeka yanıt veremedi ({e}).\n"
-                    "İpucu: Ayarlar → Yapay Zeka sekmesinden LLM modunu yapılandırın."
-                )
+                fail = tr("Yapay zeka yanıt veremedi ({e}).").format(e=e)
+                hint = tr("İpucu: Ayarlar → Yapay Zeka sekmesinden LLM modunu yapılandırın.")
+                return fail + "\n" + hint
