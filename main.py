@@ -8,8 +8,24 @@ except ImportError:
     load_dotenv = None  # python-dotenv kurulu değilse .env yükleme atlanır
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from src.llm.router import Router
-from src.core.i18n import tr, set_language
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_VENV_PY = os.path.join(_HERE, "venv", "bin", "python")
+
+# app.py ile aynı kural: venv varsa ona geç (sistem python'uyla kırık çalışmayı önler).
+if os.path.isfile(_VENV_PY) and os.path.realpath(sys.executable) != os.path.realpath(_VENV_PY):
+    os.execv(_VENV_PY, [_VENV_PY, os.path.abspath(__file__)] + sys.argv[1:])
+
+try:
+    from src.llm.router import Router
+    from src.core.i18n import tr, set_language
+except ModuleNotFoundError as e:
+    missing = getattr(e, "name", "") or str(e)
+    sys.stderr.write(
+        f"\nHATA / ERROR: Gerekli Python paketi eksik / missing package: '{missing}'\n"
+        "Çözüm / Fix: ./scripts/install.sh  (veya: ./venv/bin/pip install -r requirements.txt)\n\n"
+    )
+    sys.exit(2)
 
 # Loglama ayarları (terminalde ve dosyada tutulur)
 logging.basicConfig(

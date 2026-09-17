@@ -64,7 +64,7 @@ The extension talks to the app over `http://127.0.0.1:8765` (local only, never l
 5. Pin the microphone icon to your toolbar!
 
 **Installation (Firefox):**
-🚧 Work in progress — a separate Firefox build lives in `extensions/firefox/`, but it is not yet stable. Tracked for a future release.
+🚧 Planned — not yet available. Tracked for a future release.
 
 ## Screenshots
 
@@ -165,7 +165,7 @@ Linux-AI-Assistant/
 │   ├── tools/          # Tool Calling schemas + executor
 │   ├── context/        # Active-window context, extension bridge (:8765)
 │   └── core/           # Settings, security, i18n, updater, version
-├── extensions/         # Browser extensions (chrome/ + firefox WIP)
+├── extensions/         # Browser extension (chrome/)
 ├── tests/              # test_tools.py, test_updater.py + manual/ sandbox scripts
 ├── scripts/            # install.sh
 └── docs/screenshots/   # README images
