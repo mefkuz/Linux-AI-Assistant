@@ -194,6 +194,8 @@ TRANSLATIONS = {
     "Release Sayfasını Aç": "Open Release Page",
     "Açılışta güncellemeleri otomatik denetle": "Check for updates automatically on startup",
     "Şimdi denetle": "Check now",
+    "Arka planda çalışıyor": "Running in the background",
+    "Sistem çekmecesindeki ikona sağ tıklayarak menüyü açabilirsiniz.": "Right-click the system tray icon to open the menu.",
 }
 
 _APP_LANG = "tr"
@@ -1393,6 +1395,15 @@ class AppManager:
         menu.addAction(act_q)
         self.tray.setContextMenu(menu)
         self.tray.show()
+        # Açılış geri bildirimi: uygulama tray-only olduğundan kullanıcı
+        # tıkladıktan sonra "hiçbir şey olmadı" sanmasın diye tek seferlik balon.
+        try:
+            self.tray.showMessage(
+                "Linux-AI-Assistant",
+                tr("Arka planda çalışıyor") + " — " + tr("Sistem çekmecesindeki ikona sağ tıklayarak menüyü açabilirsiniz."),
+                QSystemTrayIcon.MessageIcon.Information, 4000)
+        except Exception:
+            pass
 
     def _clear_history(self):
         self.router.llm.clear_history()

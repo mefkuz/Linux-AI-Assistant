@@ -63,7 +63,7 @@ Path=$APP_DIR
 Icon=audio-input-microphone
 Terminal=false
 Type=Application
-Categories=Utility;Audio;
+Categories=Utility;AudioVideo;
 StartupNotify=true"
 
 # Uygulama menüsü için kısayol
@@ -73,6 +73,15 @@ chmod +x "$APPS_DIR/linux-ai-assistant.desktop"
 # Bilgisayar açılışında otomatik başlama için kısayol
 echo "$DESKTOP_FILE_CONTENT" > "$AUTOSTART_DIR/linux-ai-assistant.desktop"
 chmod +x "$AUTOSTART_DIR/linux-ai-assistant.desktop"
+
+# Masaüstü ortamının uygulama önbelleğini tazele (bayat Exec yolu kalmasın)
+if command -v kbuildsycoca6 &> /dev/null; then
+    kbuildsycoca6 --noincremental &> /dev/null || true
+elif command -v kbuildsycoca5 &> /dev/null; then
+    kbuildsycoca5 --noincremental &> /dev/null || true
+elif command -v update-desktop-database &> /dev/null; then
+    update-desktop-database "$APPS_DIR" &> /dev/null || true
+fi
 
 echo "======================================"
 echo "Kurulum Tamamlandı!"
