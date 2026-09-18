@@ -118,7 +118,7 @@ with tempfile.TemporaryDirectory() as ws:
     ex = ToolExecutor(settings=s, confirm_callback=lambda summary: cli_asked.append(summary) or False)
     r = ex.execute_tool("run_shell_command", {"command": "rm -rf /tmp/asla-olmamali"})
     check("tehlikeli komut CLI katmanında onaya takılıyor",
-          len(cli_asked) == 1 and ("iptal" in r.lower() or "reddet" in r.lower()), r)
+          len(cli_asked) == 1 and ("iptal" in r.lower() or "reddet" in r.lower() or "izin vermedi" in r.lower()), r)
     check("CLI onayı da sade özet formatında",
           isinstance(cli_asked[0], dict) and "rm -rf" in (cli_asked[0].get("detail") or ""),
           str(cli_asked))
@@ -436,6 +436,85 @@ if after_logs:
           log_text[-300:])
     check("bilinmeyen araç da loglanıyor",
           "`yok_boyle_arac` [bilinmeyen-araç]" in log_text, log_text[-300:])
+
+# 24. Workspace kaçış sezgisi (security.detect_workspace_escapes) -------------
+from src.core.security import detect_workspace_escapes
+
+with tempfile.TemporaryDirectory() as ws:
+    os.makedirs(os.path.join(ws, "alt"), exist_ok=True)
+    open(os.path.join(ws, "alt", "ic.txt"), "w").write("içerik")
+    check("mutlak dış yol yakalanıyor",
+          detect_workspace_escapes("cat /etc/passwd", ws) == ["/etc/passwd"])
+    check("güvenli komut kaçış üretmiyor",
+          detect_workspace_escapes("echo selam", ws) == []
+          and detect_workspace_escapes("ls -la", ws) == [])
+    check("workspace-içi göreli yol kaçış değil",
+          detect_workspace_escapes("cat alt/ic.txt", ws) == [])
+    check("../ ile yukarı çıkış yakalanıyor",
+          detect_workspace_escapes("cat ../disari.txt", ws) == ["../disari.txt"])
+    check("~ genişlemesi dışarıda sayılıyor",
+          detect_workspace_escapes("cat ~/gizli.txt", ws) == ["~/gizli.txt"])
+    check("-c içine gömülü yol yakalanıyor",
+          "/etc/passwd" in detect_workspace_escapes(
+              "python3 -c \"open('/etc/passwd').read()\"", ws))
+    check("flag=içinde-yol yakalanıyor",
+          "/tmp/x.out" in detect_workspace_escapes("cmd --output=/tmp/x.out", ws))
+    check("workspace atanmadıysa sezgisel pasif",
+          detect_workspace_escapes("cat /etc/passwd", "") == []
+          and detect_workspace_escapes("cat /etc/passwd", "/yok/boyle/dizin") == [])
+
+# 25. Shell kaçışı → vurgulu onay penceresi özeti -----------------------------
+with tempfile.TemporaryDirectory() as ws:
+    s = FakeSettings({"workspace_dir": ws, "require_confirm_on_tool": False,
+                      "require_confirm_on_write": False})
+    asked = []
+    ex = ToolExecutor(settings=s, confirm_callback=lambda summary: asked.append(summary) or False)
+    r = ex.execute_tool("run_shell_command", {"command": "cat /etc/passwd"})
+    check("shell kaçışı onay soruyor (ayar kapalı olsa bile)",
+          len(asked) == 1 and "izin vermedi" in r.lower(), r[:200])
+    esc = asked[0] if asked else {}
+    check("kaçış özeti vurgulu formatta",
+          esc.get("workspace_escape") is True
+          and "dışına çıkmak" in esc.get("title", "")
+          and esc.get("outside_paths") == ["/etc/passwd"]
+          and esc.get("command") == "cat /etc/passwd"
+          and ws in (esc.get("detail") or ""), str(esc)[:300])
+
+# 26. Shell kaçışı → izin verilince tek seferlik çalışıyor --------------------
+with tempfile.TemporaryDirectory() as ws:
+    s = FakeSettings({"workspace_dir": ws, "require_confirm_on_tool": False,
+                      "require_confirm_on_write": False})
+    ex = ToolExecutor(settings=s, confirm_callback=lambda summary: True)
+    r = ex.execute_tool("run_shell_command", {"command": "echo selam"})
+    check("workspace-içi komut izinsiz çalışıyor", "selam" in r, r[:200])
+    r = ex.execute_tool("run_shell_command", {"command": "cat /etc/hostname"})
+    check("izinli kaçış komutu çalışıyor", "Exit Code: 0" in r, r[:200])
+
+# 27. Dosya aracı kaçışı → ret halinde eski sessiz engelleme ------------------
+with tempfile.TemporaryDirectory() as ws:
+    s = FakeSettings({"workspace_dir": ws, "require_confirm_on_tool": False})
+    asked = []
+    ex = ToolExecutor(settings=s, confirm_callback=lambda summary: asked.append(summary) or False)
+    r = ex.execute_tool("read_file", {"path": "/etc/hostname"})
+    check("dosya kaçışı ret edilince LLM'e red metni dönüyor",
+          len(asked) == 1 and "izin vermedi" in r.lower(), r[:200])
+    check("dosya kaçış özeti vurgulu",
+          (asked[0].get("workspace_escape") is True
+           and asked[0].get("outside_paths") == ["/etc/hostname"]
+           and asked[0].get("tool") == "read_file") if asked else False,
+          str(asked[0])[:300] if asked else "sorulmadı")
+    ex2 = ToolExecutor(settings=s, confirm_callback=lambda summary: True)
+    r = ex2.execute_tool("read_file", {"path": "/etc/hostname"})
+    check("dosya kaçışı izinliyse okunuyor",
+          "hata" not in r.lower()[:30] and "/etc/hostname" in r, r[:150])
+
+# 28. Workspace atanmadıysa kaçış penceresi çıkmaz -----------------------------
+s = FakeSettings({"workspace_dir": "", "require_confirm_on_tool": False,
+                  "require_confirm_on_write": False})
+ex = ToolExecutor(settings=s, confirm_callback=lambda summary: (_ for _ in ()).throw(
+    AssertionError("workspace atanmadıysa kaçış sorulmamalı")))
+r = ex.execute_tool("run_shell_command", {"command": "echo bos-ws"})
+check("boş workspace'te kaçış denetimi pasif", "bos-ws" in r, r[:150])
 
 print(f"\n{len(PASS)} geçti, {len(FAIL)} kaldı.")
 if FAIL:

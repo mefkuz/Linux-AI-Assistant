@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QMessageBox,
     QTabWidget, QSpinBox, QCheckBox, QFormLayout, QSizePolicy,
     QListWidget, QListWidgetItem, QAbstractItemView, QStackedWidget,
-    QFileDialog, QTextEdit, QDialog, QDialogButtonBox
+    QFileDialog, QTextEdit, QDialog, QDialogButtonBox, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap, QPen, QKeyEvent, QKeySequence
@@ -199,6 +199,8 @@ TRANSLATIONS = {
     "Şimdi denetle": "Check now",
     "Arka planda çalışıyor": "Running in the background",
     "Sistem çekmecesindeki ikona sağ tıklayarak menüyü açabilirsiniz.": "Right-click the system tray icon to open the menu.",
+    "Tek Seferlik İzin Ver": "Allow This Once",
+    "Engelle": "Block",
 }
 
 _APP_LANG = "tr"
@@ -602,6 +604,103 @@ class ConfirmDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+
+class WorkspaceEscapeDialog(QDialog):
+    """Workspace kaçış uyarısı: AI atanmış dizinin dışına çıkmak istiyor.
+
+    ConfirmDialog ile aynı sade iskelet; farkı yalnızca ince kırmızı
+    vurgular: ikonlu başlık satırı + kırmızı ayırıcı çizgi + tek nötr
+    detay kutusu (yollar ve komut bir arada). Varsayılan buton
+    Engelle'dir (Enter'a basmak engeller).
+    summary: {"title", "question", "detail", "workspace_escape": True,
+              "outside_paths": [...], "command": str|None, "tool": str}
+    """
+
+    _MAX_DETAIL_LINES = 6
+
+    def __init__(self, summary, parent=None):
+        super().__init__(parent)
+        title = summary.get("title") or tr("Onay")
+        question = summary.get("question") or ""
+        detail = summary.get("detail")
+        outside = summary.get("outside_paths") or []
+        command = summary.get("command")
+
+        self.setWindowTitle(title)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        # Başlık satırı: uyarı ikonu + başlık (tek satırda, sade)
+        header = QHBoxLayout()
+        header.setSpacing(8)
+        icon_lbl = QLabel("⚠")
+        icon_lbl.setStyleSheet("font-size: 18px;")
+        header.addWidget(icon_lbl)
+        title_lbl = QLabel(title)
+        title_lbl.setWordWrap(True)
+        title_lbl.setFont(QFont("Sans Serif", 11, QFont.Weight.DemiBold))
+        header.addWidget(title_lbl, 1)
+        layout.addLayout(header)
+
+        # İnce kırmızı ayırıcı çizgi
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #c0392b;")
+        layout.addWidget(line)
+
+        # Soru metni
+        q_lbl = QLabel(question)
+        q_lbl.setWordWrap(True)
+        layout.addWidget(q_lbl)
+
+        # Tek detay kutusu: yollar + komut, nötr gri kod bloğu
+        detail_lines = []
+        if outside:
+            shown = list(outside[:5])
+            if len(outside) > 5:
+                shown.append("…")
+            detail_lines.extend(f"• {p}" for p in shown)
+        if command:
+            if detail_lines:
+                detail_lines.append("")
+            short = command if len(command) <= 300 else command[:300] + "…"
+            detail_lines.append(f"$ {short}")
+        if not detail_lines and detail:
+            detail_lines = detail.splitlines()
+        if detail_lines:
+            d_lbl = QLabel("\n".join(detail_lines[:self._MAX_DETAIL_LINES]))
+            d_lbl.setWordWrap(True)
+            d_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            d_lbl.setStyleSheet(
+                "background-color: rgba(128, 128, 128, 30);"
+                "border: 1px solid rgba(128, 128, 128, 80);"
+                "border-radius: 6px;"
+                "padding: 8px;"
+                "font-family: monospace;"
+                "font-size: 11px;"
+                "color: #bbb;"
+            )
+            layout.addWidget(d_lbl)
+
+        buttons = QDialogButtonBox()
+        btn_allow = buttons.addButton(tr("Tek Seferlik İzin Ver"),
+                                      QDialogButtonBox.ButtonRole.AcceptRole)
+        btn_block = buttons.addButton(tr("Engelle"),
+                                      QDialogButtonBox.ButtonRole.RejectRole)
+        btn_block.setDefault(True)   # Enter = Engelle (güvenli varsayılan)
+        btn_block.setFocus()
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def is_escape_summary(summary):
+        return isinstance(summary, dict) and bool(summary.get("workspace_escape"))
 
 class ResponseWindow(QDialog):
     def __init__(self, text, parent=None):
@@ -1757,15 +1856,22 @@ class AppManager:
             pass
 
     def _ask_confirm_gui(self, summary, result_list, event):
-        """Sade onay penceresi: başlık + tek soru + küçük detay."""
+        """Sade onay penceresi: başlık + tek soru + küçük detay.
+
+        workspace_escape bayraklı özetler WorkspaceEscapeDialog ile
+        (sade iskelet + ince kırmızı vurgu) gösterilir.
+        """
         if isinstance(summary, str):
             summary = {"title": tr("Onay"), "question": summary}
-        title = summary.get("title") or tr("Onay")
-        question = summary.get("question") or ""
-        detail = summary.get("detail")
 
         self._play_notification_sound()
-        dlg = ConfirmDialog(title, question, detail)
+        if WorkspaceEscapeDialog.is_escape_summary(summary):
+            dlg = WorkspaceEscapeDialog(summary)
+        else:
+            title = summary.get("title") or tr("Onay")
+            question = summary.get("question") or ""
+            detail = summary.get("detail")
+            dlg = ConfirmDialog(title, question, detail)
         result_list[0] = (dlg.exec() == QDialog.DialogCode.Accepted)
         event.set()
 

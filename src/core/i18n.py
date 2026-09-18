@@ -132,6 +132,17 @@ TRANSLATIONS = {
     "Tarayıcı komutu gönderilemedi: {e}": "Couldn't send browser command: {e}",
     "Tarayıcı komutu gönderildi: {action}": "Browser command sent: {action}",
     "Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws}).": "Security: '{path}' escapes the workspace ({ws}).",
+    # Workspace kaçış uyarısı (shell + dosya araçları)
+    "Yapay zeka çalışma alanının dışına çıkmak istiyor!": "The AI wants to leave the workspace!",
+    "Bu işlem çalışma alanı dışındaki dosyalara erişiyor:": "This operation reaches outside the workspace:",
+    "İzin verilsin mi? (sadece bu seferlik)": "Allow it? (this time only)",
+    "Komut:": "Command:",
+    "Araç:": "Tool:",
+    "Çalışma alanı:": "Workspace:",
+    "Dışarı taşan yollar:": "Paths outside the workspace:",
+    "Kullanıcı çalışma alanı dışına erişime izin vermedi. Sadece çalışma alanı içindeki dosyalarla devam et.": (
+        "The user denied access outside the workspace. Continue using only files inside the workspace."
+    ),
     # İstek günlüğü (Loglar/YYYY-MM-DD-*-log.md — PC tarafında yazılır)
     "İşlem Günlüğü": "Activity Log",
     "Tarih:": "Date:",

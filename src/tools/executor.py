@@ -22,10 +22,21 @@ import shutil
 import subprocess
 import time
 
-from src.core.security import SecurityManager
+from src.core.security import SecurityManager, detect_workspace_escapes
 from src.core.i18n import tr
 
 logger = logging.getLogger(__name__)
+
+# Workspace kaçışına karşı onay sorulacak dosya araçları.
+# Bunlar normalde _resolve_inside_workspace ile sessizce engellenir; dışarı
+# taşma tespit edilirse önce kullanıcıya tek-seferlik onay sorulur ve ret
+# halinde eski davranış (sessiz engelleme) korunur.
+FILE_TOOLS_WITH_WORKSPACE_GUARD = {
+    "read_file",
+    "write_file",
+    "append_file",
+    "list_directory",
+}
 
 # Salt-okuma araçları: asla onay gerektirmez (side-effect yok, hassas veri yok)
 READ_ONLY_TOOLS = {
@@ -368,16 +379,93 @@ class ToolExecutor:
             return bool(self.settings.get("require_confirm_on_tool", False))
         return False
 
-    def _resolve_inside_workspace(self, path):
-        """Yolu workspace içine sabitle; dışarı taşma varsa ValueError."""
+    def _resolve_inside_workspace(self, path, allow_escape=False):
+        """Yolu workspace içine sabitle; dışarı taşma varsa ValueError.
+
+        allow_escape=True ise workspace dışındaki yolu aynen çözümleyip
+        döndürür (kullanıcı kaçış penceresinde tek seferlik izin vermişse).
+        """
         ws = self._workspace()
         abs_path = path if os.path.isabs(path) else os.path.join(ws, path)
         real = os.path.realpath(abs_path)
         if real != ws and not real.startswith(ws + os.sep):
+            if allow_escape:
+                return real
             raise ValueError(
                 tr("Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws}).").format(path=path, ws=ws)
             )
         return real
+
+    def _workspace_assigned(self):
+        """Kullanıcı settings'te geçerli bir workspace dizini atamış mı?"""
+        if not self.settings:
+            return False
+        ws = (self.settings.get("workspace_dir", "") or "").strip()
+        return bool(ws) and os.path.isdir(ws)
+
+    def _ask_workspace_escape(self, name, args, outside_paths, command_text=None):
+        """Workspace kaçış girişimini kullanıcıya sorar (özel vurgulu özet).
+
+        outside_paths: workspace dışına taşan yol string'leri.
+        command_text:  shell komutuysa ham komut metni (pencerede gösterilir).
+        Döner: True (tek seferlik izin) / False (red).
+        GUI'de WorkspaceEscapeDialog, terminalde vurgulu prompt kullanılır.
+        """
+        shown = list(outside_paths[:5])
+        if len(outside_paths) > 5:
+            shown.append("…")
+        lines = [tr("Dışarı taşan yollar:")] + [f"  • {p}" for p in shown]
+        if command_text:
+            short = command_text if len(command_text) <= 300 else command_text[:300] + "…"
+            lines += ["", f"{tr('Komut:')} {short}"]
+        lines += ["", f"{tr('Araç:')} {name}", f"{tr('Çalışma alanı:')} {self._workspace()}"]
+        summary = {
+            "title": tr("Yapay zeka çalışma alanının dışına çıkmak istiyor!"),
+            "question": tr("Bu işlem çalışma alanı dışındaki dosyalara erişiyor:") + "\n" + tr("İzin verilsin mi? (sadece bu seferlik)"),
+            "detail": "\n".join(lines),
+            "workspace_escape": True,
+            "outside_paths": list(outside_paths),
+            "command": command_text,
+            "tool": name,
+        }
+        return bool(self.security.ask_confirmation(summary))
+
+    def _precheck_workspace_escape(self, name, args):
+        """Kaçış denetimi: workspace atandıysa dışarı taşmayı yakala.
+
+        Döner: (allowed, error_message)
+          - Kaçış yoksa veya kullanıcı tek seferlik izin verdiyse: (True, None).
+            İzin durumunda args içine "_escape_allowed"=True işlenir.
+          - Kullanıcı reddettiyse: (False, LLM'e dönülecek red metni).
+        """
+        if not self._workspace_assigned():
+            return True, None
+        if name in FILE_TOOLS_WITH_WORKSPACE_GUARD:
+            path = (args.get("path") or "").strip()
+            if not path:
+                return True, None  # Boş path: handler kendi hatasını üretir
+            try:
+                self._resolve_inside_workspace(path)
+                return True, None
+            except ValueError:
+                if self._ask_workspace_escape(name, args, [path]):
+                    args["_escape_allowed"] = True
+                    return True, None
+                self._log_tool_call(name, args, "kullanıcı-reddetti")
+                return False, tr("Kullanıcı çalışma alanı dışına erişime izin vermedi. Sadece çalışma alanı içindeki dosyalarla devam et.")
+        if name == "run_shell_command":
+            command = (args.get("command") or "").strip()
+            if not command:
+                return True, None
+            outside = detect_workspace_escapes(command, self._workspace())
+            if not outside:
+                return True, None
+            if self._ask_workspace_escape(name, args, outside, command_text=command):
+                args["_escape_allowed"] = True
+                return True, None
+            self._log_tool_call(name, args, "kullanıcı-reddetti")
+            return False, tr("Kullanıcı çalışma alanı dışına erişime izin vermedi. Sadece çalışma alanı içindeki dosyalarla devam et.")
+        return True, None
 
     # -- ana giriş -----------------------------------------
 
@@ -397,6 +485,13 @@ class ToolExecutor:
         if handler is None:
             self._log_tool_call(name, args, "bilinmeyen-araç")
             return tr("Bilinmeyen araç: '{name}'.").format(name=name)
+
+        # 0. Workspace kaçış denetimi (her şeyden önce):
+        #    workspace atandıysa ve araç/comut dışarı taşıyorsa, ayarlardan
+        #    bağımsız olarak vurgulu kaçış penceresiyle onay sorulur.
+        escape_ok, escape_msg = self._precheck_workspace_escape(name, args)
+        if not escape_ok:
+            return escape_msg
 
         # Onay kontrolü (üç katman):
         # 1. Hassas okuma (ekran/pano): auto_allow_clipboard kapalıyken her seferinde sor.
@@ -474,7 +569,7 @@ class ToolExecutor:
         path = (args.get("path") or "").strip()
         if not path:
             return tr("Hata: 'path' parametresi boş.")
-        real = self._resolve_inside_workspace(path)
+        real = self._resolve_inside_workspace(path, allow_escape=bool(args.get("_escape_allowed")))
         if not os.path.isfile(real):
             return tr("Dosya bulunamadı: '{path}'").format(path=path)
         try:
@@ -491,7 +586,7 @@ class ToolExecutor:
         content = args.get("content", "")
         if not path:
             return tr("Hata: 'path' parametresi boş.")
-        real = self._resolve_inside_workspace(path)
+        real = self._resolve_inside_workspace(path, allow_escape=bool(args.get("_escape_allowed")))
         parent = os.path.dirname(real)
         if parent and not os.path.isdir(parent):
             try:
@@ -510,7 +605,7 @@ class ToolExecutor:
         content = args.get("content", "")
         if not path:
             return tr("Hata: 'path' parametresi boş.")
-        real = self._resolve_inside_workspace(path)
+        real = self._resolve_inside_workspace(path, allow_escape=bool(args.get("_escape_allowed")))
         existed = os.path.isfile(real)
         parent = os.path.dirname(real)
         if parent and not os.path.isdir(parent):
@@ -527,7 +622,7 @@ class ToolExecutor:
 
     def _tool_list_directory(self, args):
         path = (args.get("path") or "").strip()
-        real = self._resolve_inside_workspace(path) if path else self._workspace()
+        real = self._resolve_inside_workspace(path, allow_escape=bool(args.get("_escape_allowed"))) if path else self._workspace()
         if not os.path.isdir(real):
             return tr("Klasör bulunamadı: '{path}'").format(path=path or real)
         try:

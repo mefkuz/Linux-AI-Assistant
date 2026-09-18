@@ -40,7 +40,7 @@ When **Tool Calling** is enabled (Settings → Security, active in Remote/Local 
 **Safety model (3 layers):**
 1. Sensitive reads (screen/clipboard) ask for confirmation every time unless you allow them in settings.
 2. File writes and command execution ask only if you enable "ask before running tools".
-3. Dangerous shell commands (`rm`, `sudo`, …) always ask for confirmation, even with confirmations off — and file tools can never escape the workspace directory.
+3. Dangerous shell commands (`rm`, `sudo`, …) always ask for confirmation, even with confirmations off — file tools can never silently escape the workspace, and any attempt to read/write outside the assigned workspace (via file tools or shell paths like `cat /etc/passwd`) raises a dedicated red **workspace-escape dialog** (one-time allow or block) instead of a plain confirm box.
 
 Every tool call is logged to `Loglar/araclar-YYYY-MM-DD.md`, and models/servers that don't support the `tools` parameter automatically fall back to plain chat.
 
@@ -154,7 +154,7 @@ The `scripts/install.sh` script installs these automatically depending on your d
 
 - **API Keys are local:** All settings and API keys are stored locally in a `settings.json` file. This file is intentionally ignored in `.gitignore` to prevent accidental uploads.
 - **You are in control:** The system prompt is fully exposed in the settings, allowing you to explicitly define how the AI behaves and what rules it follows.
-- **Permission checks:** Screen/clipboard reading asks for confirmation every time unless explicitly allowed; dangerous shell commands always require confirmation; file tools are jailed to the workspace directory.
+- **Permission checks:** Screen/clipboard reading asks for confirmation every time unless explicitly allowed; dangerous shell commands always require confirmation; file tools and shell paths are jailed to the workspace directory — escape attempts trigger a dedicated red warning dialog instead of a normal confirm box.
 - **Local-only browser bridge:** The extension communicates over `127.0.0.1` only — page contents never leave your machine except to your chosen LLM API.
 
 ## Project Structure
