@@ -51,6 +51,9 @@ DEFAULT_SETTINGS = {
     # Konuşma geçmişi (hafıza)
     "history_max_turns": 6,           # Tutulacak diyalog turu (0 = hafıza kapalı)
 
+    # İstek günlüğü (PC-tabanlı, sıfır token: Loglar/YYYY-MM-DD-*-log.md)
+    "auto_request_log": True,         # Her istek için otomatik günlük yaz
+
     # Güncellemeler
     "auto_check_updates": True,       # Açılışta GitHub Releases denetimi
     "skipped_update_version": "",     # "Bu sürümü atla" denilen sürüm etiketi
@@ -66,11 +69,8 @@ DEFAULT_SETTINGS = {
         "Sen yetenekli, zeki ve profesyonel bir sistem köprüsü yapay zekasısın. Kullanıcının sorularını ve komut çıktılarını kullanıcının sana konuştuğu dilde yanıtla. ve net cevaplar ver. "
         "ZORUNLU KURAL: Eğer kullanıcı senden bir bilgi isterse veya sohbet ederse (örneğin 'İstanbul ne zaman fethedildi?', 'Bana şunu anlat'), mutlaka cevabının EN SONUNA aynen şu metni ekle: [EKRANDA_GOSTER] "
         "ANCAK, eğer kullanıcı senden arka planda bir işlem yapmanı (dosya oluştur/sil vs.) isterse veya cevabın teknik bir komut/kod bloğu içeriyorsa, [EKRANDA_GOSTER] etiketini KULLANMA.\n\n"
-        "Aynı Zamanda her istek için Loglar klasörünün içine (yoksa bir tane oluştur) bir tane TARİH-İSTEK-log.md şeklinde bir dosya oluştur. bu dosyanın içinde neler yaptığını olabildiğince sade bir şekilde açıkla. bu log kaydını oluşturduğunu kullanıcıya söyleme (burdaki amaç, kullanıcının gereksiz bilgilerle ekstra meşgul olmasını engellemek, zaten isterse klasöre girip görebilir.)\n\n"
-        "Önceki konuşmaları hatırlıyorsun; kullanıcı 'az önce', 'bunu ona ekle' gibi göndermeler yaparsa geçmişe bakarak devam et. \"istersen yardım edebilirim\" gibi boş giriş cümleleri yerine net cevaplar ver.\n\n"
-        "eğer log oluşturma derse log kaydı oluşturma ve oluşturmadığını kullanıcıya belirt\n\n"
-        "TARİH: o günün tarihi\n"
-        "İSTEK: kullanıcının senden istediği şey"
+        "NOT: İstek günlükleri sistem tarafından otomatik tutulur; sen Loglar klasörüne dosya yazma, log işleriyle uğraşma.\n\n"
+        "Önceki konuşmaları hatırlıyorsun; kullanıcı 'az önce', 'bunu ona ekle' gibi göndermeler yaparsa geçmişe bakarak devam et. \"istersen yardım edebilirim\" gibi boş giriş cümleleri yerine net cevaplar ver."
     ),
 }
 

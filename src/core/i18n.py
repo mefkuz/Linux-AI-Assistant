@@ -132,6 +132,15 @@ TRANSLATIONS = {
     "Tarayıcı komutu gönderilemedi: {e}": "Couldn't send browser command: {e}",
     "Tarayıcı komutu gönderildi: {action}": "Browser command sent: {action}",
     "Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws}).": "Security: '{path}' escapes the workspace ({ws}).",
+    # İstek günlüğü (Loglar/YYYY-MM-DD-*-log.md — PC tarafında yazılır)
+    "İşlem Günlüğü": "Activity Log",
+    "Tarih:": "Date:",
+    "İstek:": "Request:",
+    "Yol:": "Route:",
+    "Kullanılan araçlar:": "Tools used:",
+    "(araç kullanılmadı)": "(no tools used)",
+    "Yanıt Özeti": "Response Summary",
+    "\n... (yanıt uzun olduğu için kesildi, toplam {n} karakter)": "\n... (response truncated, {n} characters total)",
 }
 
 

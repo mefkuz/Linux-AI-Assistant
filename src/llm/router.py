@@ -2,6 +2,7 @@ import logging
 from src.llm.cli import CLIExecutor
 from src.llm.client import LLMClient
 from src.core.i18n import tr
+from src.core.request_log import write_request_log
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class Router:
         "ÖNEMLİ BİLGİ: Kullanıcı sana tarayıcısındaki bir sekme, ekranındaki bir makale, açık olan bir kodu veya bir video hakkında soru soruyorsa; bu içerik sana sistem tarafından [TARAYICIDAKİ SAYFANIN TAM METNİ], [TARAYICIDA SEÇİLEN METİN], [EKRANDAKİ DOSYANIN İÇERİĞİ] veya [VİDEONUN TAM İÇERİĞİ / ALTYAZISI] gibi etiketlerle otomatik olarak iletilmiş OLMALIDIR.\n"
         "EĞER bu etiketler sana iletilmemişse ve kullanıcı ekranındaki/sekmesindeki bir şeyi soruyorsa, ekranı doğrudan göremeyeceğini, ancak tarayıcı eklentisindeki (yapboz ikonu) 'Bu Sekmeyi Gönder' butonuna tıklayarak veya ekrandaki kısayol butonlarını kullanarak veriyi sana gönderebileceğini kibarca hatırlat.\n\n"
         "TARAYICI YÖNETİMİ: Kullanıcı tarayıcısını kontrol etmeni isterse (sekme kapat, sayfayı kaydır, yeni sekme aç vb.) veya bir mail/form cevabı yazdırıyorsa, `browser_action` aracını kullan (eklenti kurulu olmalıdır).\n\n"
-        "Aynı zamanda her komut/istek için Loglar klasörünün içine bir tane TARİH-İSTEK-log.md oluştur. İçinde neler yaptığını sade açıkla. Log oluşturduğunu kullanıcıya söyleme. (Kullanıcı log oluşturma derse oluşturma).\n\n"
+        "NOT: İstek günlükleri sistem tarafından otomatik tutulur; sen Loglar klasörüne dosya yazma, log işleriyle uğraşma.\n\n"
         "Önceki konuşmaları hatırlıyorsun; kullanıcının göndermeleri ('az önce', 'ona ekle' vb.) için geçmişe bak. Net cevaplar ver."
     )
 
@@ -70,6 +71,26 @@ class Router:
             raw = cli_result['stdout'] or cli_result['stderr'] or tr("(çıktı yok)")
             return f"\n--- {tr("KOMUT ÇIKTISI")} ---\n{raw}"
 
+    def _auto_log(self, user_input, response, route):
+        """İstek günlüğünü PC tarafında yazar (sıfır token).
+
+        route: "cli" veya "llm". Kullanıcı "log oluşturma/log tutma" derse
+        bu istek için atlanır; ayar kapalıysa tamamen devre dışıdır.
+        """
+        try:
+            if self.settings and not self.settings.get("auto_request_log", True):
+                return
+            lowered = user_input.lower()
+            if any(kw in lowered for kw in ("log oluşturma", "log olusturma", "log tutma", "günlük tutma", "gunluk tutma")):
+                logger.info("Kullanıcı log istemedi, istek günlüğü atlandı.")
+                return
+            llm_mode = self.settings.get("llm_mode", "") if self.settings else ""
+            tools_used = list(getattr(self.llm, "last_tools_used", []) or [])
+            write_request_log(user_input, response, tools_used=tools_used,
+                              mode=route, llm_mode=llm_mode)
+        except Exception as e:
+            logger.warning(f"Otomatik istek günlüğü atlandı: {e}")
+
     def parse_and_route(self, user_input, context=None):
         user_input = user_input.strip()
         if not user_input:
@@ -86,14 +107,16 @@ class Router:
             if cli_result['status'] == 'cancelled':
                 return cli_result['stderr']
 
-            return self._analyze_with_llm(user_input, cli_result)
+            response = self._analyze_with_llm(user_input, cli_result)
+            self._auto_log(user_input, response, route="cli")
+            return response
 
         else:
             # Doğal dil → LLM
             logger.info("LLM yönlendirmesi.")
             sys_prompt = self.settings.get("system_prompt", self.DEFAULT_SYSTEM_PROMPT) if self.settings else self.DEFAULT_SYSTEM_PROMPT
             try:
-                return self.llm.generate_response(
+                response = self.llm.generate_response(
                     system_prompt=sys_prompt,
                     user_prompt=user_input,
                     context=context
@@ -103,3 +126,5 @@ class Router:
                 fail = tr("Yapay zeka yanıt veremedi ({e}).").format(e=e)
                 hint = tr("İpucu: Ayarlar → Yapay Zeka sekmesinden LLM modunu yapılandırın.")
                 return fail + "\n" + hint
+            self._auto_log(user_input, response, route="llm")
+            return response

@@ -157,6 +157,9 @@ TRANSLATIONS = {
     "Hafıza": "Memory",
     "Hatırlanacak konuşma turu:": "Dialogue turns to remember:",
     "Son kaç soru-cevap turu modele gönderilir.\n0 = hafıza kapalı.": "How many recent Q&A turns are sent to the model.\n0 = memory off.",
+    "Günlük": "Logging",
+    "Her istek için günlük dosyası yaz": "Write a log file per request",
+    "Her istek Loglar/ klasörüne günlüklenir (PC tarafında, ek ücret yok).": "Each request is logged under Loglar/ (locally, no extra cost).",
     "Çalışma Alanı Seç": "Select Workspace",
     "Seçili metin eklendi": "Selected text added",
     "Video eklendi": "Video added",
@@ -969,6 +972,12 @@ class SettingsWindow(QWidget):
         hist_row.addWidget(self.hist_spin)
         hist_row.addStretch()
         sl.addLayout(hist_row)
+
+        _section(tr("Günlük"))
+        self.req_log_check = _check(
+            tr("Her istek için günlük dosyası yaz"),
+            tr("Her istek Loglar/ klasörüne günlüklenir (PC tarafında, ek ücret yok)."),
+            "auto_request_log", True)
         sl.addStretch()
 
         tabs.addTab(tab_sec, tr("Güvenlik"))
@@ -1106,6 +1115,7 @@ class SettingsWindow(QWidget):
         s.set("require_confirm_on_tool",  self.tool_confirm_check.isChecked())
         s.set("tool_max_iterations",      self.tool_iter_spin.value())
         s.set("history_max_turns",        self.hist_spin.value())
+        s.set("auto_request_log",         self.req_log_check.isChecked())
         s.set("auto_check_updates",       self.upd_auto_check.isChecked())
 
         if self.hotkey_manager:

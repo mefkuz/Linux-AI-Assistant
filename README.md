@@ -9,6 +9,7 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
 - **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 9 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, and control the browser. Dangerous commands and sensitive reads ask for confirmation first.
 - **Conversation Memory (NEW!):** The AI remembers the last N dialogue turns (configurable, default 6). Follow-ups like "add that to the file you just opened" work naturally. Clear it anytime from the tray menu.
+- **Zero-Token Request Logs (NEW!):** Every request is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` by the PC itself — the AI no longer spends tool calls and tokens on logging. Toggleable in Settings → Security.
 - **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms).
 - **Context Awareness:** Can instantly read your clipboard and perform OCR on your screen (using native Linux tools like Grim, Spectacle, or Gnome-Screenshot) to provide context to the AI.
 - **Universal Linux Support:** The installer handles dependencies seamlessly across Arch, Debian/Ubuntu, Fedora, and openSUSE.
@@ -46,6 +47,10 @@ Every tool call is logged to `Loglar/araclar-YYYY-MM-DD.md`, and models/servers 
 ## Conversation Memory
 
 The assistant keeps the last N question-answer turns (Settings → Security → "Conversation turns to remember", 0 = off) and sends them with each request, in all three LLM modes. Internal calls (CLI output analysis, dictation cleanup) never pollute the history. Use **Tray menu → Clear Memory** to start fresh.
+
+## Request Logs
+
+Every request (CLI command or natural-language question) is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` — written locally by the app itself with **zero tokens**, so the AI never wastes tool calls on logging. Each file records the date, request, route (cli/llm), tools used, and a response summary. Say "don't log this" ("log tutma") to skip a single request, or disable logging entirely in **Settings → Security → Logging**.
 
 ## Browser Extension Integration
 
