@@ -1,17 +1,17 @@
 import subprocess
 import re
-import os
 from src.core.i18n import tr
 
 def get_active_contexts():
     """
-    Scans the system for active media, windows, or processes 
-    to provide contextual information for the AI.
+    Scans the system for active media players (MPRIS) to provide
+    contextual information for the AI.
     Returns a list of dicts with 'type', 'title', 'detail', 'icon'.
+    Only media contexts (YouTube video / playing song) are returned.
     """
     contexts = []
     
-    # --- 1. MPRIS Media Players ---
+    # --- MPRIS Media Players ---
     try:
         result = subprocess.run(['dbus-send', '--session', '--dest=org.freedesktop.DBus',
                                  '--type=method_call', '--print-reply',
@@ -46,69 +46,12 @@ def get_active_contexts():
                         
                     is_youtube = (title and "YouTube" in title) or (url and "youtube.com/watch" in url)
                     is_spotify = "spotify" in player.lower() or (url and "spotify.com" in url)
-                    is_vlc = "vlc" in player.lower()
                     
                     if is_youtube:
                         contexts.append({"type": "media", "icon": "▶", "label": tr("YouTube Videosunu"), "title": title or "YouTube Video", "detail": url})
                     elif is_spotify:
                         disp = f"{artist} - {title}" if artist and title else (title or tr("Spotify Şarkısı"))
                         contexts.append({"type": "media", "icon": "♪", "label": tr("Çalan Şarkıyı"), "title": disp, "detail": url})
-    except Exception:
-        pass
-
-    # --- 2. Active Window (X11 / Fallback) ---
-    w_title = None
-    try:
-        # Try xdotool
-        result = subprocess.run(['xdotool', 'getactivewindow', 'getwindowname'], capture_output=True, text=True, timeout=1)
-        if result.returncode == 0 and result.stdout.strip():
-            w_title = result.stdout.strip()
-    except Exception:
-        pass
-
-    if not w_title:
-        try:
-            # Try xprop (more commonly installed than xdotool)
-            id_result = subprocess.run(['xprop', '-root', '_NET_ACTIVE_WINDOW'], capture_output=True, text=True, timeout=1)
-            if id_result.returncode == 0:
-                match = re.search(r'window id # (0x[a-fA-F0-9]+)', id_result.stdout)
-                if match:
-                    win_id = match.group(1)
-                    name_result = subprocess.run(['xprop', '-id', win_id, '_NET_WM_NAME'], capture_output=True, text=True, timeout=1)
-                    if name_result.returncode == 0:
-                        name_match = re.search(r'_NET_WM_NAME\(\w+\) = "(.*)"', name_result.stdout)
-                        if name_match:
-                            w_title = name_match.group(1).strip()
-        except Exception:
-            pass
-
-    if w_title:
-        try:
-            # Terminal
-            if "Terminal" in w_title or "Konsole" in w_title or "Alacritty" in w_title or "Kitty" in w_title or "@" in w_title:
-                contexts.append({"type": "window", "icon": "🖥️", "label": tr("Terminali"), "title": w_title, "detail": None})
-            # Dosya Yöneticisi
-            elif "Nautilus" in w_title or "Dolphin" in w_title or "Thunar" in w_title or "Nemo" in w_title:
-                contexts.append({"type": "window", "icon": "📁", "label": tr("Açık Klasörü"), "title": w_title, "detail": None})
-            # Ofis
-            elif "LibreOffice" in w_title or "Word" in w_title or "Excel" in w_title:
-                contexts.append({"type": "window", "icon": "📄", "label": tr("Üzerinde Çalışılan Belgeyi"), "title": w_title, "detail": None})
-            # Tarayıcı (Eğer medya algılanmadıysa veya sekmeyi de eklemek isterse)
-            elif "Firefox" in w_title or "Chrome" in w_title or "Brave" in w_title or "Edge" in w_title:
-                contexts.append({"type": "window", "icon": "🌐", "label": tr("Açık Sekmeyi"), "title": w_title, "detail": None})
-            # Bilinmeyen / Klasör (Örneğin sadece "Belgeler" yazıyorsa)
-            elif w_title:
-                # Kendi arayüzümüzü yoksayalım
-                if "Linux-AI-Assistant" not in w_title:
-                    contexts.append({"type": "window", "icon": "🗔", "label": tr("Açık Pencereyi"), "title": w_title, "detail": None})
-        except Exception:
-            pass
-
-    # Kwin/KDE Wayland fallback for Active Window
-    try:
-        if "KDE_FULL_SESSION" in os.environ:
-            result = subprocess.run(['qdbus', 'org.kde.KWin', '/KWin', 'org.kde.KWin.activeWindow'], capture_output=True, text=True, timeout=1)
-            # Hard to parse easily without complex scripting, we will rely on XWayland/xdotool where possible or leave it.
     except Exception:
         pass
 

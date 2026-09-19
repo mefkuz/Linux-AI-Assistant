@@ -236,8 +236,8 @@ def get_openai_tools():
             "function": {
                 "name": "get_active_window_context",
                 "description": (
-                    "O anda açık olan pencere/medya oynatıcı gibi bağlamları listeler "
-                    "(pencere başlığı, çalan şarkı/video bilgisi)."
+                    "O anda çalan medya oynatıcı bağlamlarını listeler "
+                    "(çalan şarkı / YouTube video bilgisi)."
                 ),
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },

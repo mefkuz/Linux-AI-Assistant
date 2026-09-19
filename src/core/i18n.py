@@ -76,11 +76,6 @@ TRANSLATIONS = {
     "YouTube Videosunu": "YouTube video",
     "Çalan Şarkıyı": "currently playing song",
     "Spotify Şarkısı": "Spotify song",
-    "Terminali": "terminal",
-    "Açık Klasörü": "open folder",
-    "Üzerinde Çalışılan Belgeyi": "document in progress",
-    "Açık Sekmeyi": "open tab",
-    "Açık Pencereyi": "open window",
     # Terminal arayüzü (main.py)
     "Mod: Bağlam Duyarlı CLI / LLM Arabirimi": "Mode: Context-aware CLI / LLM interface",
     "Çıkmak için 'exit' veya 'quit' yazın.": "Type 'exit' or 'quit' to leave.",
