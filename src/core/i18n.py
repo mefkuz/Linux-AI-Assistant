@@ -127,6 +127,15 @@ TRANSLATIONS = {
     "Tarayıcı komutu gönderilemedi: {e}": "Couldn't send browser command: {e}",
     "Tarayıcı komutu gönderildi: {action}": "Browser command sent: {action}",
     "Güvenlik: '{path}' çalışma alanı dışına taşıyor (workspace: {ws}).": "Security: '{path}' escapes the workspace ({ws}).",
+    # Web araçları (hata/fallback metinleri, LLM'e dönen)
+    "Hata: 'query' parametresi boş.": "Error: 'query' is empty.",
+    "Hata: 'url' parametresi boş.": "Error: 'url' is empty.",
+    "Web araması başarısız oldu ({e}). Başka bir sorguyla tekrar dene.": "Web search failed ({e}). Try another query.",
+    "Sonuç bulunamadı: '{q}'. Farklı kelimelerle tekrar dene.": "No results for '{q}'. Try different words.",
+    "'{q}' için {n} sonuç:": "{n} results for '{q}':",
+    "Sayfadan metin çıkarılamadı: {url}": "Couldn't extract text from: {url}",
+    "Sayfa okunamadı ({e}). web_search ile başka bir adres dene.": "Couldn't read page ({e}). Try another URL via web_search.",
+    "\n... (sayfa uzun, kesildi)": "\n... (page too long, truncated)",
     # Workspace kaçış uyarısı (shell + dosya araçları)
     "Yapay zeka çalışma alanının dışına çıkmak istiyor!": "The AI wants to leave the workspace!",
     "Bu işlem çalışma alanı dışındaki dosyalara erişiyor:": "This operation reaches outside the workspace:",

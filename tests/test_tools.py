@@ -29,19 +29,21 @@ def check(name, cond, detail=""):
 
 # 1. Şema geçerliliği ------------------------------------------------
 tools = get_openai_tools()
-check("9 araç tanımlı", len(tools) == 9, f"bulunan: {len(tools)}")
+check("11 araç tanımlı", len(tools) == 11, f"bulunan: {len(tools)}")
 names = {t["function"]["name"] for t in tools}
 check("beklenen araç adları",
       names == {"run_shell_command", "read_file", "write_file", "append_file", "list_directory",
                 "get_clipboard_text", "read_screen_text",
-                "get_active_window_context", "browser_action"},
+                "get_active_window_context", "browser_action",
+                "web_search", "fetch_web_page"},
       str(names))
 check("tüm şemalar function tipinde",
       all(t.get("type") == "function" and "parameters" in t["function"] for t in tools))
 
 # 2. Salt-okunurluk ve hassas-okuma kümeleri -------------------------------
 check("read_only seti doğru",
-      READ_ONLY_TOOLS == {"read_file", "list_directory", "get_active_window_context"})
+      READ_ONLY_TOOLS == {"read_file", "list_directory", "get_active_window_context",
+                          "web_search", "fetch_web_page"})
 check("sensitive seti doğru",
       set(SENSITIVE_READ_TOOLS) == {"read_screen_text", "get_clipboard_text"})
 
@@ -515,6 +517,139 @@ ex = ToolExecutor(settings=s, confirm_callback=lambda summary: (_ for _ in ()).t
     AssertionError("workspace atanmadıysa kaçış sorulmamalı")))
 r = ex.execute_tool("run_shell_command", {"command": "echo bos-ws"})
 check("boş workspace'te kaçış denetimi pasif", "bos-ws" in r, r[:150])
+
+# 29. web_search (mock ağ): başlık+url+snippet, token cimrisi ---------------
+from src.tools.executor import duckduckgo_search, _unwrap_ddg_href
+
+_FAKE_DDG_HTML = """
+<html><body>
+<div class="result"><h2><a rel="nofollow" class="result__a"
+href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fornek.com%2Fyazi&amp;rut=abc">Ornek Baslik</a></h2>
+<a class="result__snippet" href="//duckduckgo.com/l/?uddg=x">""" + "s" * 500 + """</a></div>
+<div class="result"><h2><a rel="nofollow" class="result__a"
+href="https://duz.com/sayfa">Duz Adres</a></h2>
+<a class="result__snippet" href="x">kisa ozet</a></div>
+</body></html>
+"""
+
+
+class _FakeWebResp:
+    def __init__(self, text=""):
+        self.text = text
+
+    def raise_for_status(self):
+        pass
+
+
+with mock.patch("requests.get", return_value=_FakeWebResp(_FAKE_DDG_HTML)):
+    found = duckduckgo_search("test sorgusu", max_results=5)
+
+check("ddg href çözülüyor",
+      found[0]["url"] == "https://ornek.com/yazi"
+      and found[1]["url"] == "https://duz.com/sayfa", str(found))
+check("başlık+snippet ayrışıyor",
+      found[0]["title"] == "Ornek Baslik" and found[1]["snippet"] == "kisa ozet",
+      str(found))
+with mock.patch("requests.get", return_value=_FakeWebResp(_FAKE_DDG_HTML)):
+    capped = duckduckgo_search("x", max_results=1)
+check("max_results sınırlıyor", len(capped) == 1, str(len(capped)))
+
+ex = ToolExecutor(settings=FakeSettings({"workspace_dir": tempfile.gettempdir(),
+                                         "require_confirm_on_tool": True}))
+# Web araçları salt-okunur: onay açık olsa bile sorulmaz + red metni yok
+asked_web = []
+ex.confirm_callback = lambda summary: asked_web.append(summary) or False
+with mock.patch("requests.get", return_value=_FakeWebResp(_FAKE_DDG_HTML)):
+    r = ex.execute_tool("web_search", {"query": "test", "max_results": 5})
+check("web_search onay sormuyor (salt-okunur)",
+      not asked_web and "Ornek Baslik" in r and "ornek.com/yazi" in r, r[:300])
+check("uzun snippet 200 karaktere kırpılıyor",
+      ("s" * 201) not in r and "…" in r, r[:400])
+check("boş query hata veriyor",
+      "query" in ex.execute_tool("web_search", {"query": "  "}).lower())
+with mock.patch("requests.get", side_effect=Exception("ağ yok")):
+    r = ex.execute_tool("web_search", {"query": "x"})
+check("ağ hatası yumuşak mesaja dönüşüyor",
+      "başarısız" in r.lower() and "tekrar dene" in r.lower(), r[:200])
+
+# 30. fetch_web_page (mock ağ): HTML temizlik + sorgu kırpma ----------------
+from src.tools.executor import html_to_text, fetch_url_as_text
+
+_dirty = """<html><head><style>.a{color:red}</style><script>alert(1)</script></head>
+<body><header>UST MENU giris iletisim</header><nav>link1 link2</nav>
+<article><p>Asil icerik burada. Minecraft Wesper modu anlatiliyor.</p></article>
+<footer>ALT bilgi gizlilik</footer></body></html>"""
+clean = html_to_text(_dirty)
+check("script/style/header/footer/nav atılıyor",
+      "alert" not in clean and "UST MENU" not in clean and "ALT bilgi" not in clean
+      and "Asil icerik burada" in clean, clean[:200])
+
+_big_html = ("<html><body><p>" + "dolgu " * 2000 + "</p>"
+             "<p>Wesper modu gizemli yaratik ekler, Kays ana karakterdir.</p></body></html>")
+
+
+class _FakePageResp:
+    headers = {"Content-Type": "text/html; charset=utf-8"}
+    encoding = "utf-8"
+
+    def __init__(self, text):
+        self._text = text
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size=None, decode_unicode=None):
+        yield self._text
+
+
+with mock.patch("requests.get", return_value=_FakePageResp(_big_html)):
+    txt, ctype = fetch_url_as_text("https://ornek.com/x")
+check("sayfa metne çevriliyor", "Wesper modu" in txt and "html" in ctype, txt[:120])
+
+with mock.patch("requests.get", return_value=_FakePageResp(_big_html)):
+    r = ex.execute_tool("fetch_web_page", {"url": "https://ornek.com/x",
+                                           "query": "Wesper Kays nedir"})
+check("sorgu-odaklı kırpma ilgili paragrafı seçiyor",
+      "Kays ana karakterdir" in r and "dolgu dolgu" not in r
+      and len(r) <= 4400, f"len={len(r)}")
+with mock.patch("requests.get", return_value=_FakePageResp(_big_html)):
+    r2 = ex.execute_tool("fetch_web_page", {"url": "https://ornek.com/x"})
+check("query yoksa baştan kırpma (4000)",
+      r2.startswith("[https://ornek.com/x]:") and len(r2) <= 4400, f"len={len(r2)}")
+check("boş url hata veriyor",
+      "url" in ex.execute_tool("fetch_web_page", {"url": ""}).lower())
+check("http(s) dışı url reddediliyor",
+      "okunamadı" in ex.execute_tool("fetch_web_page", {"url": "ftp://x"}).lower())
+
+
+class _FakePdfResp(_FakePageResp):
+    headers = {"Content-Type": "application/pdf"}
+
+
+with mock.patch("requests.get", return_value=_FakePdfResp("PDFBYTES")):
+    r = ex.execute_tool("fetch_web_page", {"url": "https://ornek.com/a.pdf"})
+check("PDF içerik türü reddediliyor",
+      "okunamadı" in r.lower() and "başka bir adres" in r.lower(), r[:200])
+
+# 31. webtext birimi: Türkçe normalizasyon + stop-word -----------------------
+from src.tools.webtext import pick_relevant_sections
+
+_tr_page = ("Kısa menü satırı atlanır mı diye burası uzun tutuldu evet.\n\n"
+            "İstanbul'un fethi 1453 yılında gerçekleşti ve orta çağ kapandı.\n\n"
+            "Hava durumu bugün güneşli olacak deniyor Ankara için tahmin.")
+_sel = pick_relevant_sections(_tr_page, "İstanbul ne zaman fethedildi", limit=4000)
+check("TR karakterli sorgu ilgili paragrafı buluyor",
+      "1453" in _sel and "Hava durumu" not in _sel, _sel[:200])
+check("stop-word-only sorgu başa düşüyor",
+      pick_relevant_sections(_tr_page, "ve ile bu", limit=60).startswith("Kısa menü"),
+      pick_relevant_sections(_tr_page, "ve ile bu", limit=60)[:80])
+check("boş metin boş döner", pick_relevant_sections("", "x") == "")
+
+# 32. Şema token cimriliği: toplam açıklama uzunluğu tavanı -------------------
+import json as _json
+_schema_chars = len(_json.dumps(tools, ensure_ascii=False))
+check("11 araç şeması 6000 karakter altında",
+      _schema_chars < 6000, f"şema={_schema_chars} karakter")
 
 print(f"\n{len(PASS)} geçti, {len(FAIL)} kaldı.")
 if FAIL:

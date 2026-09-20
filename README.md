@@ -7,7 +7,7 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 ## Key Features
 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
-- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 9 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, and control the browser. Dangerous commands and sensitive reads ask for confirmation first.
+- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 11 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser, and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
 - **Conversation Memory (NEW!):** The AI remembers the last N dialogue turns (configurable, default 6). Follow-ups like "add that to the file you just opened" work naturally. Clear it anytime from the tray menu.
 - **Zero-Token Request Logs (NEW!):** Every request is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` by the PC itself — the AI no longer spends tool calls and tokens on logging. Toggleable in Settings → Security.
 - **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms).
@@ -25,7 +25,7 @@ Notes for non-git installs (ZIP download): in-place update isn't possible — th
 
 ## Tool Calling
 
-When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes), the model receives 9 function tools and calls them as needed — no keywords required:
+When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes), the model receives 11 function tools and calls them as needed — no keywords required:
 
 | Tool | What it does |
 |---|---|
@@ -36,6 +36,10 @@ When **Tool Calling** is enabled (Settings → Security, active in Remote/Local 
 | `get_clipboard_text` | Reads the clipboard |
 | `get_active_window_context` | Lists the active window / media player context |
 | `browser_action` | Controls the browser via the extension (close tab, scroll, fill form, new tab) |
+| `web_search` | Searches the web (DuckDuckGo, no API key): titles + URLs + snippets |
+| `fetch_web_page` | Downloads a page as clean text (menus/ads stripped, query-focused trim) |
+
+Token-frugal by design: tool schemas are kept short, search snippets are capped (~200 chars each), fetched pages are trimmed to ~4000 chars with question-relevant paragraphs picked locally in Python (zero LLM tokens) instead of dumping whole pages into context.
 
 **Safety model (3 layers):**
 1. Sensitive reads (screen/clipboard) ask for confirmation every time unless you allow them in settings.

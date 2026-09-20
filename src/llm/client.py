@@ -62,13 +62,12 @@ class LLMClient:
         # "ekranı göremiyorum" gibi eski talimatlarla çelişmesin.
         if mode in ("remote", "local") and not skip_injection and self._tool_calling_enabled():
             system_prompt += (
-                "\n\n[ARAÇLAR]: Sana fonksiyon araçları (tools) tanımlandı. Kullanıcı ekranındaki, "
-                "panosundaki veya dosyalarındaki bir şeyi sorarsa bunu araçlarla OKUYABİLİRSİN: "
+                "\n\n[ARAÇLAR]: Fonksiyon araçların var. Gereken veriyi önce araçla al, "
+                "sonra cevapla — ASLA 'göremiyorum/erişemiyorum' deme, önce ilgili aracı dene: "
                 "`read_screen_text` (ekran OCR), `get_clipboard_text` (pano), "
-                "`read_file`/`list_directory` (dosyalar), `run_shell_command` (terminal), "
-                "`browser_action` (tarayıcı kontrolü). "
-                "İhtiyacın olan veriyi önce araçla al, sonra cevapla. "
-                "ASLA 'göremiyorum' veya 'erişemiyorum' deme; önce ilgili aracı dene."
+                "`read_file`/`list_directory` (dosya), `run_shell_command` (terminal), "
+                "`browser_action` (tarayıcı), `web_search`+`fetch_web_page` (İNTERNET: "
+                "güncel bilgi gerektiğinde MUTLAKA bunları kullan; shell ile web kazıma YASAK)."
             )
 
         if mode == "cli" and not skip_injection:

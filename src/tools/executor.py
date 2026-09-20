@@ -43,6 +43,8 @@ READ_ONLY_TOOLS = {
     "read_file",
     "list_directory",
     "get_active_window_context",
+    "web_search",
+    "fetch_web_page",
 }
 
 # Hassas okuma araçları: side-effect yok ama özel veri okur (ekran görüntüsü,
@@ -124,10 +126,9 @@ def get_openai_tools():
             "function": {
                 "name": "run_shell_command",
                 "description": (
-                    "Linux terminal komutu çalıştırır: listeleme, arama, git, "
-                    "paket bilgisi gibi OKUMA AMAÇLI işler için kullan. "
-                    "Dosya OLUŞTURMA/DÜZENLEME için bu aracı KULLANMA "
-                    "(echo/cat > heredoc YASAK) — yerine write_file/append_file kullan. "
+                    "Terminal komutu çalıştırır (ls, git, paket bilgisi...). "
+                    "DOSYA YAZMA YASAK (echo/cat>heredoc) → write_file kullan. "
+                    "WEB ARAMA YASAK (curl kazıma, python-requests) → web_search kullan. "
                     "Çıktı stdout+stderr ve exit code olarak döner."
                 ),
                 "parameters": {
@@ -135,7 +136,7 @@ def get_openai_tools():
                     "properties": {
                         "command": {
                             "type": "string",
-                            "description": "Çalıştırılacak shell komutu, örn: 'ls -la'",
+                            "description": "Shell komutu, örn: 'ls -la'",
                         },
                     },
                     "required": ["command"],
@@ -146,11 +147,11 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "read_file",
-                "description": "Bir metin dosyasının içeriğini okur. Dizin dışına taşan yollar reddedilir.",
+                "description": "Metin dosyası okur (workspace dışına taşan yol reddedilir).",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Okunacak dosyanın yolu (göreli veya mutlak)."},
+                        "path": {"type": "string", "description": "Dosya yolu."},
                     },
                     "required": ["path"],
                 },
@@ -161,15 +162,14 @@ def get_openai_tools():
             "function": {
                 "name": "write_file",
                 "description": (
-                    "Bir metin dosyası oluşturur veya üzerine yazar. "
-                    "Dosya yazma işlerinin TEK yolu budur (shell'e echo ile yazma). "
-                    "Sadece çalışma alanı (workspace) dizini içine yazılabilir."
+                    "Dosya oluşturur/üzerine yazar. Dosya yazmanın TEK yolu "
+                    "(shell-echo YASAK). Yalnızca workspace içine."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Yazılacak dosyanın yolu."},
-                        "content": {"type": "string", "description": "Dosyaya yazılacak içerik."},
+                        "path": {"type": "string", "description": "Dosya yolu."},
+                        "content": {"type": "string", "description": "İçerik."},
                     },
                     "required": ["path", "content"],
                 },
@@ -180,16 +180,14 @@ def get_openai_tools():
             "function": {
                 "name": "append_file",
                 "description": (
-                    "Bir metin dosyasının SONUNA içerik ekler. Dosya yoksa oluşturur. "
-                    "Mevcut bir dosyaya satır eklemek için write_file yerine bunu kullan "
-                    "(dosyanın tamamını yeniden yazmana gerek yok). "
-                    "Sadece çalışma alanı (workspace) dizini içine yazılabilir."
+                    "Dosya SONUNA ekler (yoksa oluşturur). Satır eklemek için "
+                    "write_file yerine bunu kullan. Yalnızca workspace içine."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "Eklenecek dosyanın yolu."},
-                        "content": {"type": "string", "description": "Dosyanın sonuna eklenecek içerik."},
+                        "path": {"type": "string", "description": "Dosya yolu."},
+                        "content": {"type": "string", "description": "Eklenecek içerik."},
                     },
                     "required": ["path", "content"],
                 },
@@ -199,13 +197,13 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "list_directory",
-                "description": "Bir klasörün içeriğini listeler.",
+                "description": "Klasör listeler (boş = workspace).",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Listelenecek klasör. Boş bırakılırsa çalışma alanı kullanılır.",
+                            "description": "Klasör (boş = workspace).",
                         },
                     },
                     "required": [],
@@ -216,7 +214,7 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "get_clipboard_text",
-                "description": "Kullanıcının panosundaki (kopyalanmış) metni okur.",
+                "description": "Panodaki metni okur.",
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
         },
@@ -224,10 +222,7 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "read_screen_text",
-                "description": (
-                    "Kullanıcının ekranının görüntüsünü çekip OCR ile metne çevirir. "
-                    "Kullanıcı 'ekranda ne var', 'ekrandaki yazı' gibi şeyler sorduğunda kullan."
-                ),
+                "description": "Ekranı OCR ile okur ('ekranda ne var' sorularında).",
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
         },
@@ -235,10 +230,7 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "get_active_window_context",
-                "description": (
-                    "O anda çalan medya oynatıcı bağlamlarını listeler "
-                    "(çalan şarkı / YouTube video bilgisi)."
-                ),
+                "description": "Çalan medyayı listeler (şarkı/YouTube bilgisi).",
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
         },
@@ -247,26 +239,75 @@ def get_openai_tools():
             "function": {
                 "name": "browser_action",
                 "description": (
-                    "Kullanıcının tarayıcısını kontrol eder: sekme kapatma, sayfa kaydırma, "
-                    "forma metin yazma. Tarayıcı eklentisi kurulu olmalıdır."
+                    "Tarayıcıyı kontrol eder (eklenti gerekli): sekme kapat, "
+                    "kaydır, forma yaz, yeni sekme."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "Eylem adı: close_tab, scroll_down, scroll_up, fill_form, new_tab",
+                            "description": "close_tab, scroll_down, scroll_up, fill_form, new_tab",
                         },
                         "text": {
                             "type": "string",
-                            "description": "fill_form eylemi için forma yazılacak metin.",
+                            "description": "fill_form metni.",
                         },
                         "url": {
                             "type": "string",
-                            "description": "new_tab eylemi için açılacak adres.",
+                            "description": "new_tab adresi.",
                         },
                     },
                     "required": ["action"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": (
+                    "İnternette ara (DuckDuckGo, anahtarsız). Güncel olay/sürüm/wiki/"
+                    "hata çözümü gibi konularda kullan; shell ile kazıma YASAK. "
+                    "Başlık+adres+özet döndürür; detay için fetch_web_page."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Sorgu, örn: 'Minecraft Wesper mod nedir'",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Sonuç sayısı (1-10, öntanımlı 5).",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "fetch_web_page",
+                "description": (
+                    "Sayfayı metne çevirip okur (menü/reklam temizlenir). "
+                    "web_search adreslerini derinlemesine okumak için kullan."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Sayfa adresi (https://...).",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Opsiyonel: sayfada aranan konu (çıktıyı kısaltır).",
+                        },
+                    },
+                    "required": ["url"],
                 },
             },
         },
@@ -347,6 +388,146 @@ def read_clipboard_subprocess():
         except Exception:
             continue
     return ""
+
+
+# ──────────────────────────────────────────────────────────
+#  Web arama + sayfa okuma (DuckDuckGo / requests, API anahtarsız)
+# ──────────────────────────────────────────────────────────
+
+import html as _html
+import re as _re
+import urllib.parse as _urlparse
+
+_WEB_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120 Safari/537.36"
+    )
+}
+_WEB_TIMEOUT = 20
+_WEB_MAX_DOWNLOAD_BYTES = 1_500_000  # 1.5 MB: devasa sayfalara karşı üst sınır
+# Token cimriliği sabitleri: snippet/sayfa kırpma bu limitlerle yapılır
+# (MAX_TOOL_OUTPUT_CHARS=8000 genel tavan olarak kalır).
+_WEB_SNIPPET_CHARS = 200   # arama sonucu başına özet uzunluğu
+_WEB_FETCH_CHARS = 4000    # fetch_web_page çıktısı üst sınırı (~1000 token)
+
+
+def _unwrap_ddg_href(href):
+    """DuckDuckGo //duckduckgo.com/l/?uddg=<urlencoded> bağlantısını çözer."""
+    href = _html.unescape(href or "")
+    if "duckduckgo.com/l/" in href and "uddg=" in href:
+        try:
+            qs = _urlparse.parse_qs(_urlparse.urlsplit(href).query)
+            if qs.get("uddg"):
+                return qs["uddg"][0]
+        except Exception:
+            pass
+    return href
+
+
+def duckduckgo_search(query, max_results=5):
+    """DuckDuckGo HTML ucundan arama yapar, API anahtarı gerekmez.
+
+    Döner: [{"title": str, "url": str, "snippet": str}, ...]
+    Ağ/format hatalarında exception fırlatır (çağıran yakalar).
+    """
+    import requests
+
+    query = (query or "").strip()
+    if not query:
+        raise ValueError("query boş")
+    max_results = max(1, min(int(max_results or 5), 10))
+
+    resp = requests.get(
+        "https://html.duckduckgo.com/html/",
+        params={"q": query},
+        headers=_WEB_HEADERS,
+        timeout=_WEB_TIMEOUT,
+    )
+    resp.raise_for_status()
+
+    links = _re.findall(
+        r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+        resp.text, _re.S,
+    )
+    snippets = _re.findall(
+        r'class="result__snippet"[^>]*>(.*?)</a>', resp.text, _re.S,
+    )
+    if not snippets:
+        # Yedek desen: snippet etiketi farklı kapanıyorsa
+        snippets = _re.findall(
+            r'class="result__snippet"[^>]*>(.*?)</', resp.text, _re.S,
+        )
+
+    results = []
+    for i, (href, raw_title) in enumerate(links[:max_results]):
+        title = _html.unescape(_re.sub(r"<[^>]+>", "", raw_title)).strip()
+        snip = ""
+        if i < len(snippets):
+            snip = _html.unescape(_re.sub(r"<[^>]+>", "", snippets[i])).strip()
+        results.append({
+            "title": title or "(başlıksız)",
+            "url": _unwrap_ddg_href(href),
+            "snippet": snip,
+        })
+    return results
+
+
+def html_to_text(page_html):
+    """Ham HTML'yi LLM'in okuyabileceği düz metne çevirir (token cimrisi).
+
+    script/style/noscript + header/footer/nav/aside blokları atılır;
+    kalan metin sıkıştırılır. Menü artıkları için fetch tarafı ayrıca
+    pick_relevant_sections ile soru-odaklı kırpma yapar.
+    """
+    text = page_html or ""
+    # Gürültü blokları: sayfa iskeleti token şişirir, bilgi taşımaz
+    text = _re.sub(r"<(script|style|noscript|header|footer|nav|aside)[^>]*>.*?</\1>",
+                   " ", text, flags=_re.S | _re.I)
+    # Blok etiketleri önce satır sonuna çevir (paragraf sınırları korunsun)
+    text = _re.sub(r"</?(?:p|br|li|h[1-6]|tr|div|article|section)[^>]*>",
+                   "\n\n", text, flags=_re.I)
+    text = _re.sub(r"<[^>]+>", " ", text)   # kalan (satır-içi) etiketler → boşluk
+    text = _html.unescape(text)
+    text = _re.sub(r"[ \t\xa0]+", " ", text)          # yatay boşlukları sıkıştır
+    text = _re.sub(r"\n\s*\n+", "\n\n", text)         # çoklu satır boşlukları
+    return text.strip()
+
+
+def fetch_url_as_text(url):
+    """URL'deki sayfayı indirip düz metne çevirir.
+
+    Döner: (metin, içerik_türü). HTML olmayan içerik (PDF vb.) veya
+    hata durumlarında exception fırlatır (çağıran yakalar).
+    """
+    import requests
+
+    url = (url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError("URL http:// veya https:// ile başlamalı")
+
+    resp = requests.get(url, headers=_WEB_HEADERS,
+                        timeout=_WEB_TIMEOUT, stream=True)
+    resp.raise_for_status()
+
+    content_type = (resp.headers.get("Content-Type", "") or "").lower()
+    if "html" not in content_type and "text" not in content_type:
+        raise ValueError(f"desteklenmeyen içerik türü: {content_type or 'bilinmiyor'}")
+
+    chunks, total = [], 0
+    for chunk in resp.iter_content(chunk_size=65536, decode_unicode=True):
+        if not chunk:
+            continue
+        if isinstance(chunk, bytes):
+            chunk = chunk.decode(resp.encoding or "utf-8", errors="replace")
+        total += len(chunk)
+        if total > _WEB_MAX_DOWNLOAD_BYTES:
+            break
+        chunks.append(chunk)
+    page_html = "".join(chunks)
+    if not page_html.strip():
+        raise ValueError("sayfa içeriği boş")
+    return html_to_text(page_html), content_type
 
 
 # ──────────────────────────────────────────────────────────
@@ -682,3 +863,60 @@ class ToolExecutor:
         except Exception as e:
             return tr("Tarayıcı komutu gönderilemedi: {e}").format(e=e)
         return tr("Tarayıcı komutu gönderildi: {action}").format(action=action)
+
+    def _tool_web_search(self, args):
+        query = (args.get("query") or "").strip()
+        if not query:
+            return tr("Hata: 'query' parametresi boş.")
+        try:
+            max_results = int(args.get("max_results", 5) or 5)
+        except (TypeError, ValueError):
+            max_results = 5
+        try:
+            results = duckduckgo_search(query, max_results=max_results)
+        except Exception as e:
+            logger.warning(f"Web arama hatası ('{query[:60]}'): {e}")
+            return tr("Web araması başarısız oldu ({e}). Başka bir sorguyla tekrar dene.").format(
+                e=truncate_error(e, 200))
+        if not results:
+            return tr("Sonuç bulunamadı: '{q}'. Farklı kelimelerle tekrar dene.").format(q=query)
+        # Token cimriliği: sonuç başına tek satır (başlık + url),
+        # snippet yalnızca ilk SONUÇ değil her sonuç için kısaltılmış verilir.
+        lines = [tr("'{q}' için {n} sonuç:").format(q=query, n=len(results))]
+        for i, r in enumerate(results, 1):
+            lines.append(f"{i}. {r['title']}\n   {r['url']}")
+            if r["snippet"]:
+                snip = r["snippet"]
+                if len(snip) > _WEB_SNIPPET_CHARS:
+                    snip = snip[:_WEB_SNIPPET_CHARS] + "…"
+                lines.append(f"   {snip}")
+        return "\n".join(lines)
+
+    def _tool_fetch_web_page(self, args):
+        url = (args.get("url") or "").strip()
+        if not url:
+            return tr("Hata: 'url' parametresi boş.")
+        try:
+            # Sorgu bağlamı: sayfa metnini sorulan konuya göre kırp (token tasarrufu).
+            # Yardımcı modül yoksa (veya hata verirse) düz kırpma kullanılır.
+            try:
+                from src.tools.webtext import pick_relevant_sections
+            except ImportError:
+                pick_relevant_sections = None
+            text, _ctype = fetch_url_as_text(url)
+            if not text.strip():
+                return tr("Sayfadan metin çıkarılamadı: {url}").format(url=url)
+            query_hint = (args.get("query") or "").strip()
+            if query_hint and pick_relevant_sections:
+                try:
+                    text = pick_relevant_sections(text, query_hint,
+                                                  limit=_WEB_FETCH_CHARS)
+                except Exception:
+                    pass
+            if len(text) > _WEB_FETCH_CHARS:
+                text = text[:_WEB_FETCH_CHARS] + tr("\n... (sayfa uzun, kesildi)")
+            return f"[{url}]:\n{text}"
+        except Exception as e:
+            logger.warning(f"Sayfa okuma hatası ({url[:80]}): {e}")
+            return tr("Sayfa okunamadı ({e}). web_search ile başka bir adres dene.").format(
+                e=truncate_error(e, 200))

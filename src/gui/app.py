@@ -1038,11 +1038,11 @@ class SettingsWindow(QWidget):
         _section(tr("Araç Çağırma (Uzak/Yerel API)"))
         self.tool_enable_check = _check(
             tr("Araç Çağırma aktif"),
-            "Yapay zeka dosya/komut/ekran/pano/tarayıcı araçlarını kullanabilir.\n"
+            "Yapay zeka dosya/komut/ekran/pano/tarayıcı/web-arama araçlarını kullanabilir.\n"
             "Aktifken eski keyword tabanlı pano/ekran enjeksiyonu devre dışı kalır.\n"
             "Terminal (CLI) modunda etkisizdir."
             if _APP_LANG == "tr" else
-            "The AI can use file/command/screen/clipboard/browser tools.\n"
+            "The AI can use file/command/screen/clipboard/browser/web-search tools.\n"
             "When on, legacy keyword-based clipboard/screen injection is disabled.\n"
             "No effect in terminal (CLI) mode.",
             "enable_tool_calling", True)
@@ -1800,7 +1800,8 @@ class AppManager:
                 # (Yazma/çalıştırma araçlarında "arka planda tamamlandı" davranışı korunur.)
                 tools_used = getattr(self.router.llm, 'last_tools_used', []) or []
                 read_only_tools = {"read_file", "list_directory", "get_clipboard_text",
-                                   "read_screen_text", "get_active_window_context"}
+                                   "read_screen_text", "get_active_window_context",
+                                   "web_search", "fetch_web_page"}
                 if (tools_used and set(tools_used) <= read_only_tools
                         and not getattr(self, '_context_queue', None)
                         and len(response) >= 200

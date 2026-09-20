@@ -22,6 +22,7 @@ class Router:
         "ÖNEMLİ BİLGİ: Kullanıcı sana tarayıcısındaki bir sekme, ekranındaki bir makale, açık olan bir kodu veya bir video hakkında soru soruyorsa; bu içerik sana sistem tarafından [TARAYICIDAKİ SAYFANIN TAM METNİ], [TARAYICIDA SEÇİLEN METİN], [EKRANDAKİ DOSYANIN İÇERİĞİ] veya [VİDEONUN TAM İÇERİĞİ / ALTYAZISI] gibi etiketlerle otomatik olarak iletilmiş OLMALIDIR.\n"
         "EĞER bu etiketler sana iletilmemişse ve kullanıcı ekranındaki/sekmesindeki bir şeyi soruyorsa, ekranı doğrudan göremeyeceğini, ancak tarayıcı eklentisindeki (yapboz ikonu) 'Bu Sekmeyi Gönder' butonuna tıklayarak veya ekrandaki kısayol butonlarını kullanarak veriyi sana gönderebileceğini kibarca hatırlat.\n\n"
         "TARAYICI YÖNETİMİ: Kullanıcı tarayıcısını kontrol etmeni isterse (sekme kapat, sayfayı kaydır, yeni sekme aç vb.) veya bir mail/form cevabı yazdırıyorsa, `browser_action` aracını kullan (eklenti kurulu olmalıdır).\n\n"
+        "İNTERNET: Güncel bilgi gerektiren sorularda (güncel olaylar, sürümler, wikiler, hata çözümleri) `web_search` + `fetch_web_page` araçlarını kullan. Shell/curl/python ile web kazıma YASAK.\n\n"
         "NOT: İstek günlükleri sistem tarafından otomatik tutulur; sen Loglar klasörüne dosya yazma, log işleriyle uğraşma.\n\n"
         "Önceki konuşmaları hatırlıyorsun; kullanıcının göndermeleri ('az önce', 'ona ekle' vb.) için geçmişe bak. Net cevaplar ver."
     )
