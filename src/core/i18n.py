@@ -54,6 +54,9 @@ TRANSLATIONS = {
     "[LLM Hatası ({mode})]: {e}": "[LLM Error ({mode})]: {e}",
     "İşlem tamamlandı (kullanılan araçlar: {tools}).": "Done (tools used: {tools}).",
     "Detay için Loglar klasörüne bakabilirsiniz.": "See the Loglar folder for details.",
+    "(Araç limiti dolduğu için ham sonuçlar derlendi — özetlenemedi.)": (
+        "(Tool limit reached, raw results compiled — not summarized.)"
+    ),
     "CLI modu için ayarlar yüklenmedi.": "Settings not loaded for CLI mode.",
     "Uzak mod için ayarlar yüklenmedi.": "Settings not loaded for remote mode.",
     "REMOTE_LLM_API_KEY boş. Ayarlardan doldurun.": "REMOTE_LLM_API_KEY is empty. Fill it in Settings.",

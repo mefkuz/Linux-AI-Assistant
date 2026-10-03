@@ -1055,7 +1055,7 @@ class SettingsWindow(QWidget):
         iter_row.addWidget(QLabel(tr("Maks. araç turu:")))
         self.tool_iter_spin = QSpinBox()
         self.tool_iter_spin.setRange(1, 10)
-        self.tool_iter_spin.setValue(self.settings.get("tool_max_iterations", 5))
+        self.tool_iter_spin.setValue(self.settings.get("tool_max_iterations", 8))
         self.tool_iter_spin.setToolTip(tr("Üst üste kaç tur araç çağrılabilir (sonsuz döngü koruması)."))
         iter_row.addWidget(self.tool_iter_spin)
         iter_row.addStretch()
@@ -1796,7 +1796,7 @@ class AppManager:
                 response = re.sub(r'\[\s*EKRANDA[_ ]G[OÖ]STER\s*\]', '', response, flags=re.IGNORECASE).strip()
             else:
                 # Fallback: model etiketi unuttuysa ama okuma amaçlı araç kullanıp
-                # uzun bir yanıt ürettiyse kullanıcı muhtemelen cevabı görmek istiyor.
+                # anlamlı bir yanıt ürettiyse kullanıcı muhtemelen cevabı görmek istiyor.
                 # (Yazma/çalıştırma araçlarında "arka planda tamamlandı" davranışı korunur.)
                 tools_used = getattr(self.router.llm, 'last_tools_used', []) or []
                 read_only_tools = {"read_file", "list_directory", "get_clipboard_text",
@@ -1804,8 +1804,9 @@ class AppManager:
                                    "web_search", "fetch_web_page"}
                 if (tools_used and set(tools_used) <= read_only_tools
                         and not getattr(self, '_context_queue', None)
-                        and len(response) >= 200
-                        and '[LLM Hatası' not in response):
+                        and len(response.strip()) >= 50
+                        and '[LLM Hatası' not in response
+                        and '[LLM Error' not in response):
                     logger.info(f"[EKRANDA_GOSTER] etiketi yok ama fallback ile popup açılıyor (araçlar: {tools_used})")
                     wants_popup = True
 

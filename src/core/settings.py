@@ -46,7 +46,7 @@ DEFAULT_SETTINGS = {
     # Araç Çağırma (Tool Calling)
     "enable_tool_calling": True,      # Master switch (remote/local modlarında geçerli)
     "require_confirm_on_tool": False, # Her araç çalıştırmadan önce onay iste
-    "tool_max_iterations": 5,         # Agentic döngü üst sınırı
+    "tool_max_iterations": 8,         # Agentic döngü üst sınırı
 
     # Konuşma geçmişi (hafıza)
     "history_max_turns": 6,           # Tutulacak diyalog turu (0 = hafıza kapalı)

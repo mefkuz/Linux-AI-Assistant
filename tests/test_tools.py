@@ -651,6 +651,123 @@ _schema_chars = len(_json.dumps(tools, ensure_ascii=False))
 check("11 araç şeması 6000 karakter altında",
       _schema_chars < 6000, f"şema={_schema_chars} karakter")
 
+# 33. Üst-sınır sonrası özet garantisi (5090 senaryosu) -------------------------
+# Model tool limitini doldurup boş dönerse, kullanıcı "İşlem tamamlandı,
+# Loglar'a bak" gibi içi boş bir mesaj görmemeli: ya özet talimatıyla
+# modelden cevap alınır ya da PC tarafında ham sonuç derlemesi döner.
+from src.llm.client import LLMClient as _LLMClient2
+
+
+def _tool_call_msg(name, args, call_id="c1"):
+    return {"role": "assistant", "content": None, "tool_calls": [
+        {"id": call_id, "type": "function",
+         "function": {"name": name, "arguments": json.dumps(args)}}
+    ]}
+
+
+# 33a. Model özet talimatına uyup cevap üretiyor → etiketli cevap döner.
+s = FakeSettings({"workspace_dir": tempfile.gettempdir(), "enable_tool_calling": True,
+                  "require_confirm_on_tool": False, "tool_max_iterations": 1,
+                  "require_confirm_on_write": False})
+_c = _LLMClient2(settings=s)
+_posts33 = []
+
+
+def _fake_post_summary(url, headers=None, json=None, timeout=None):
+    _posts33.append(json)
+    if len(_posts33) == 1:
+        return FakeResp({"choices": [{"message": _tool_call_msg(
+            "web_search", {"query": "RTX 5090 fiyat"})}]})
+    return FakeResp({"choices": [{"message": {"role": "assistant", "content":
+        "RTX 5090 yaklaşık 120 bin TL. [EKRANDA_GOSTER]"}}]})
+
+
+with mock.patch("requests.post", side_effect=_fake_post_summary), \
+     mock.patch("src.tools.executor.duckduckgo_search",
+                return_value=[{"title": "Fiyat", "url": "https://x.com",
+                               "snippet": "120 bin TL"}]):
+    _out = _c._chat_with_tools("http://x", None, "m",
+                               [{"role": "user", "content": "5090 araştır"}])
+check("üst-sınırda özet talimatı enjekte ediliyor",
+      any("ARAÇ LİMİTİNE ULAŞTIN" in (m.get("content") or "")
+          for m in _posts33[-1]["messages"]), str(len(_posts33)))
+check("model özeti kullanıcıya dönüyor (boş değil)",
+      "120 bin TL" in _out and "[EKRANDA_GOSTER]" in _out, _out[:150])
+
+# 33b. Model özet çağrısında da boş dönüyor → PC derlemesi devreye girer.
+_c2 = _LLMClient2(settings=s)
+
+
+def _fake_post_empty2(url, headers=None, json=None, timeout=None):
+    msgs = (json or {}).get("messages", [])
+    if any(m.get("role") == "tool" for m in msgs):
+        # Üst-sınır sonrası özet çağrısı (talimat enjekte edilmiş) → boş dön
+        return FakeResp({"choices": [{"message": {"role": "assistant", "content": ""}}]})
+    return FakeResp({"choices": [{"message": _tool_call_msg(
+        "web_search", {"query": "RTX 5090 fiyat"})}]})
+
+
+with mock.patch("requests.post", side_effect=_fake_post_empty2), \
+     mock.patch("src.tools.executor.duckduckgo_search",
+                return_value=[{"title": "Fiyat Listesi", "url": "https://m.com",
+                               "snippet": "5090 stokta 115000 TL"}]):
+    _out2 = _c2._chat_with_tools("http://x", None, "m",
+                                 [{"role": "user", "content": "5090 araştır"}])
+check("boş özet yerine PC derlemesi dönüyor",
+      "115000 TL" in _out2 and "web_search" in _out2
+      and "[EKRANDA_GOSTER]" in _out2
+      and "Loglar klasörüne bakabilirsiniz" not in _out2, _out2[:250])
+
+# 33c. _compile_tool_results birimi: başlık + kırpma + boş durum.
+_c3 = _LLMClient2(settings=FakeSettings({}))
+_msgs = [{"role": "user", "content": "sor"},
+         {"role": "assistant", "content": None, "tool_calls": [{"id": "c1"}]},
+         {"role": "tool", "tool_call_id": "c1", "name": "web_search",
+          "content": "'x' için 2 sonuç:\n1. A\n   https://a.com"}]
+_compiled = _c3._compile_tool_results(_msgs)
+check("derleme başlık + araç adı + içerik taşıyor",
+      "ham sonuçlar derlendi" in _compiled and "web_search" in _compiled
+      and "https://a.com" in _compiled and "[EKRANDA_GOSTER]" in _compiled,
+      _compiled[:200])
+_empty = _c3._compile_tool_results([{"role": "user", "content": "sor"}])
+check("tool çıktısı yoksa eski mesaja düşülüyor",
+      "İşlem tamamlandı" in _empty and "Loglar" in _empty, _empty[:150])
+_long = _c3._compile_tool_results(
+    [{"role": "tool", "tool_call_id": f"c{i}", "name": "web_search",
+      "content": f"sonuç {i} " + "z" * 1100} for i in range(5)])
+check("derleme 2500 karaktere kırpılıyor",
+      len(_long) <= 2900 and "kesildi" in _long and "sonuç 0" in _long,
+      f"len={len(_long)}")
+
+# 33d. Özet çağrısı HTTP hatası verse bile derleme döner (exception yok).
+_c4 = _LLMClient2(settings=s)
+
+
+def _fake_post_err(url, headers=None, json=None, timeout=None):
+    msgs = (json or {}).get("messages", [])
+    if any("ARAÇ LİMİTİNE ULAŞTIN" in (m.get("content") or "") for m in msgs):
+        return FakeResp({}, ok=False, status=500, text="sunucu hatası")
+    if json and "tools" in json:
+        return FakeResp({"choices": [{"message": _tool_call_msg(
+            "web_search", {"query": "q"})}]})
+    return FakeResp({"choices": [{"message": {"role": "assistant", "content": ""}}]})
+
+
+with mock.patch("requests.post", side_effect=_fake_post_err), \
+     mock.patch("src.tools.executor.duckduckgo_search",
+                return_value=[{"title": "T", "url": "https://u.com", "snippet": "bilgi"}]):
+    _out4 = _c4._chat_with_tools("http://x", None, "m",
+                                 [{"role": "user", "content": "araştır"}])
+check("özet HTTP hatasında derleme garantisi korunuyor",
+      "bilgi" in _out4 and "[EKRANDA_GOSTER]" in _out4, _out4[:200])
+
+# 34. tool_max_iterations yeni varsayılanı --------------------------------------
+from src.core.settings import DEFAULT_SETTINGS
+check("varsayılan tur 8", DEFAULT_SETTINGS.get("tool_max_iterations") == 8,
+      str(DEFAULT_SETTINGS.get("tool_max_iterations")))
+check("client fallback 8",
+      _LLMClient2(settings=FakeSettings({}))._tool_max_iterations() == 8)
+
 print(f"\n{len(PASS)} geçti, {len(FAIL)} kaldı.")
 if FAIL:
     print("Kalanlar:", FAIL)

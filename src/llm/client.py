@@ -208,7 +208,7 @@ class LLMClient:
     def _tool_max_iterations(self):
         if self.settings:
             try:
-                return max(1, min(int(self.settings.get("tool_max_iterations", 5)), 10))
+                return max(1, min(int(self.settings.get("tool_max_iterations", 8)), 10))
             except (TypeError, ValueError):
                 pass
         return 5
@@ -278,20 +278,65 @@ class LLMClient:
                 })
 
         logger.warning(f"Tool döngüsü üst sınıra ulaştı ({max_iter}), son yanıt döndürülüyor.")
-        # Üst sınıra ulaşıldıysa son bir tools'suz çağrı ile özet yanıt al
-        resp = requests.post(url, headers=headers, json={
-            "model": model, "messages": messages, "max_tokens": 4096
-        }, timeout=timeout)
-        if not resp.ok:
-            raise RuntimeError(f"HTTP {resp.status_code}: {_short_err(resp.text)}")
-        content = resp.json()["choices"][0]["message"].get("content") or ""
-        if not content.strip() and self.last_tools_used:
-            # Model özet üretemediyse kullanıcıya boş ekran gösterme:
-            # yapılan işleri listele.
-            done = tr("İşlem tamamlandı (kullanılan araçlar: {tools}).").format(
-                tools=", ".join(self.last_tools_used))
-            content = done + " " + tr("Detay için Loglar klasörüne bakabilirsiniz.")
+        # Üst sınıra ulaşıldıysa son bir tools'suz çağrı ile özet yanıt al.
+        # Modele açık talimat enjekte edilir: eldeki tool sonuçlarıyla SORUYU
+        # yanıtlasın, boş dönmesin ("...'ı araştır' sorularında kullanıcının
+        # ekranı boş kalmasın" garantisi).
+        messages.append({
+            "role": "user",
+            "content": (
+                "ARAÇ LİMİTİNE ULAŞTIN — artık araç çağıramazsın. "
+                "Elindeki araç sonuçlarını kullanarak KULLANICININ ORİJİNAL SORUSUNU "
+                "şimdi yanıtla. Kısa özetle yetinme: bulguları derleyip net bir cevap ver. "
+                "Cevabın en sonuna [EKRANDA_GOSTER] etiketini ekle."
+            ),
+        })
+        try:
+            resp = requests.post(url, headers=headers, json={
+                "model": model, "messages": messages, "max_tokens": 4096
+            }, timeout=timeout)
+            if resp.ok:
+                content = resp.json()["choices"][0]["message"].get("content") or ""
+            else:
+                content = ""
+        except Exception as e:
+            logger.warning(f"Özet çağrısı başarısız: {e}")
+            content = ""
+        if not content.strip():
+            # Model yine boş döndüyse (veya özet çağrısı patladıysa) son çare:
+            # tool sonuçlarını PC tarafında derleyip kullanıcıya göster.
+            # Böylece cevap ASLA "İşlem tamamlandı, Loglar'a bak" gibi
+            # içi boş bir mesaja düşmez.
+            content = self._compile_tool_results(messages)
         return content
+
+    def _compile_tool_results(self, messages):
+        """Tool çıktılarını kullanıcıya gösterilebilir bir derlemeye çevirir.
+
+        Sadece _chat_with_tools'un üst-sınır yolunda, model özet üretemezse
+        çağrılır. Tool sonuçlarının ilk ~2500 karakterini madde madde dizer;
+        sonuç yoksa eski "işlem tamamlandı" mesajına düşer.
+        """
+        tool_msgs = [m for m in messages if m.get("role") == "tool"]
+        parts = []
+        for m in tool_msgs:
+            body = (m.get("content") or "").strip()
+            if not body:
+                continue
+            # Red/iptal/hata mesajları "bilgi" değildir, ama tamamen boş
+            # kalmaktansa ne olduğunu söylemek daha dürüsttür.
+            parts.append(f"• **{m.get('name', '?')}**: {body[:1200]}")
+        if not parts:
+            done = tr("İşlem tamamlandı (kullanılan araçlar: {tools}).").format(
+                tools=", ".join(self.last_tools_used) or "?")
+            return done + " " + tr("Detay için Loglar klasörüne bakabilirsiniz.")
+        joined = "\n\n".join(parts)
+        if len(joined) > 2500:
+            joined = joined[:2500] + tr("\n... ({n} karakter kesildi)").format(
+                n=len(joined) - 2500)
+        header = tr(
+            "(Araç limiti dolduğu için ham sonuçlar derlendi — özetlenemedi.)")
+        return f"{header}\n\n{joined} [EKRANDA_GOSTER]"
 
     def _call_cli(self, system_prompt, user_prompt, history=None):
         """
