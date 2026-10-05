@@ -7,10 +7,10 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 ## Key Features
 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
-- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 11 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser, and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
+- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 11 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser/desktop (tabs, scrolling, forms, clicks, key presses — works with or without the browser extension), and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
 - **Conversation Memory (NEW!):** The AI remembers the last N dialogue turns (configurable, default 6). Follow-ups like "add that to the file you just opened" work naturally. Clear it anytime from the tray menu.
 - **Zero-Token Request Logs (NEW!):** Every request is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` by the PC itself — the AI no longer spends tool calls and tokens on logging. Toggleable in Settings → Security.
-- **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms).
+- **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms, click buttons, press keys). Even without the extension, the AI can control tabs, scrolling, typing, clicks and key presses at OS level (Wayland + X11).
 - **Context Awareness:** Can instantly read your clipboard and perform OCR on your screen (using native Linux tools like Grim, Spectacle, or Gnome-Screenshot) to provide context to the AI.
 - **Universal Linux Support:** The installer handles dependencies seamlessly across Arch, Debian/Ubuntu, Fedora, and openSUSE.
 - **Flexible LLM Integration:** Connect to local models (e.g., LM Studio, Ollama), remote APIs (e.g., Groq, OpenAI, OpenRouter), or CLI-based AI tools.
@@ -35,7 +35,7 @@ When **Tool Calling** is enabled (Settings → Security, active in Remote/Local 
 | `read_screen_text` | Screenshots the screen and reads it via OCR |
 | `get_clipboard_text` | Reads the clipboard |
 | `get_active_window_context` | Lists the active window / media player context |
-| `browser_action` | Controls the browser via the extension (close tab, scroll, fill form, new tab) |
+| `browser_action` | Controls the browser/desktop (new/close tab, scroll, fill form, click button or coordinate, press key — extension preferred, OS-level fallback) |
 | `web_search` | Searches the web (DuckDuckGo, no API key): titles + URLs + snippets |
 | `fetch_web_page` | Downloads a page as clean text (menus/ads stripped, query-focused trim) |
 
@@ -61,7 +61,7 @@ Every request (CLI command or natural-language question) is automatically logged
 The **Manifest V3 Browser Extension** (compatible with Chrome, Brave, and Edge) takes the AI's context awareness to the next level. It works in both directions:
 
 - **Browser → AI (context):** Click "Send This Tab" (or right-click selected text → "Ask Linux AI Assistant") to inject the page into the AI's context. Gmail threads, PDFs, and articles are extracted as clean text; YouTube videos automatically resolve to their full transcript.
-- **AI → Browser (control):** Voice commands like "Close this tab", "Scroll down", or "Reply to this email with a polite rejection" are executed through the `browser_action` tool — the AI drafts the reply and injects it directly into your Gmail compose box or any active web form.
+- **AI → Browser (control):** Voice commands like "Close this tab", "Scroll down", "Click the Send button", or "Reply to this email with a polite rejection" are executed through the `browser_action` tool — the AI drafts the reply and injects it directly into your Gmail compose box or any active web form. When the extension isn't connected, the same actions fall back to OS-level automation (`ydotool`/`xdotool`/`pynput`), and clicks can target on-screen text found via OCR.
 
 The extension talks to the app over `http://127.0.0.1:8765` (local only, never leaves your machine).
 
@@ -153,6 +153,7 @@ The `scripts/install.sh` script installs these automatically depending on your d
 - `tesseract` & `tesseract-ocr` language packs (for screen context reading)
 - A screenshot utility (`grim` for Wayland, `spectacle` for KDE, or `gnome-screenshot` for GNOME/GTK)
 - XCB libraries (for PyQt6 compatibility)
+- Optional (extension-free desktop control): `ydotool` (+ `ydotoold` service), `xdotool`, `wl-clipboard` (`wl-copy`/`wl-paste` on Wayland), `xclip` (X11) — the installer adds these best-effort; the app auto-falls back to `pynput` when they're missing
 
 ## Security & Privacy
 
@@ -175,7 +176,7 @@ Linux-AI-Assistant/
 │   ├── context/        # Active-window context, extension bridge (:8765)
 │   └── core/           # Settings, security, i18n, updater, version
 ├── extensions/         # Browser extension (chrome/)
-├── tests/              # test_tools.py, test_updater.py + manual/ sandbox scripts
+├── tests/              # test_tools.py, test_os_input.py, test_updater.py + manual/ sandbox scripts
 ├── scripts/            # install.sh
 └── docs/screenshots/   # README images
 ```

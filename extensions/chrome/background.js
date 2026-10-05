@@ -118,6 +118,43 @@ function connectSSE() {
                         },
                         args: [data.params?.text || ""]
                     });
+                } else if (data.action === "click") {
+                    chrome.scripting.executeScript({
+                        target: {tabId: tab.id},
+                        func: (params) => {
+                            const { selector, text, x, y } = params || {};
+                            if (selector) {
+                                let el = document.querySelector(selector);
+                                if (el) { el.click(); return; }
+                            }
+                            if (text) {
+                                let lower = text.trim().toLowerCase();
+                                let candidates = document.querySelectorAll('button, a, input[type="submit"], input[type="button"], [role="button"]');
+                                for (let el of candidates) {
+                                    if ((el.innerText || el.value || "").toLowerCase().includes(lower)) {
+                                        el.click();
+                                        return;
+                                    }
+                                }
+                            }
+                            if (typeof x === 'number' && typeof y === 'number') {
+                                let el = document.elementFromPoint(x, y);
+                                if (el) el.click();
+                            }
+                        },
+                        args: [data.params || {}]
+                    });
+                } else if (data.action === "press_key") {
+                    chrome.scripting.executeScript({
+                        target: {tabId: tab.id},
+                        func: (keyName) => {
+                            let activeEl = document.activeElement || document.body;
+                            let key = keyName || "Enter";
+                            activeEl.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
+                            activeEl.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true }));
+                        },
+                        args: [data.params?.key || data.params?.text || "Enter"]
+                    });
                 }
             });
         } catch (e) {}

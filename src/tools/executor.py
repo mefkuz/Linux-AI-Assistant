@@ -77,20 +77,29 @@ def _summarize_append(args):
 
 def _summarize_browser(args):
     action = (args.get("action") or "").strip()
+    key_name = args.get("text") or args.get("key") or "Enter"
     labels = {
         "close_tab": tr("açık sekmeyi kapatmak"),
         "scroll_down": tr("sayfayı aşağı kaydırmak"),
         "scroll_up": tr("sayfayı yukarı kaydırmak"),
         "fill_form": tr("forma metin yazmak"),
         "new_tab": tr("yeni sekme açmak"),
+        "click": tr("ekranda butona veya koordinata tıklamak"),
+        "press_key": tr("'{key}' tuşuna basmak").format(key=key_name),
     }
     what = labels.get(action, tr("'{action}' işlemini yapmak").format(action=action))
     detail = None
-    if args.get("text"):
+    if action == "click":
+        target = args.get("coordinate") or args.get("text") or tr("mevcut konum")
+        detail = tr("Hedef: ") + str(target)
+    elif action == "press_key":
+        detail = tr("Tuş: ") + str(key_name)
+    elif args.get("text"):
         detail = tr("Yazılacak metin: ") + ((args["text"][:100] + "…") if len(args["text"]) > 100 else args["text"])
     elif args.get("url"):
         detail = tr("Adres: ") + args["url"]
     return (tr("Tarayıcıda işlem yapılsın mı?"), tr("Yapay zeka {what} istiyor.").format(what=what), detail)
+
 
 
 TOOL_SUMMARIZERS = {
@@ -239,23 +248,31 @@ def get_openai_tools():
             "function": {
                 "name": "browser_action",
                 "description": (
-                    "Tarayıcıyı kontrol eder (eklenti gerekli): sekme kapat, "
-                    "kaydır, forma yaz, yeni sekme."
+                    "Tarayıcı veya ekrandaki pencereleri kontrol eder (eklenti olmadan da çalışır): "
+                    "sekme aç/kapat, kaydır, forma yaz, butona veya koordinata tıkla, tuşa bas."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "close_tab, scroll_down, scroll_up, fill_form, new_tab",
+                            "description": "close_tab, scroll_down, scroll_up, fill_form, new_tab, click, press_key",
                         },
                         "text": {
                             "type": "string",
-                            "description": "fill_form metni.",
+                            "description": "fill_form metni, press_key tuşu ('Enter', 'Tab' vb.) veya tıklanacak buton adı.",
                         },
                         "url": {
                             "type": "string",
-                            "description": "new_tab adresi.",
+                            "description": "new_tab için adres (https://...).",
+                        },
+                        "coordinate": {
+                            "type": "string",
+                            "description": "click için piksel koordinatı, örn: '500,300'.",
+                        },
+                        "button": {
+                            "type": "string",
+                            "description": "click için fare tuşu: 'left' (öntanımlı), 'right', 'double'.",
                         },
                     },
                     "required": ["action"],
@@ -383,11 +400,22 @@ def read_clipboard_subprocess():
             continue
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout:
                 return result.stdout
         except Exception:
             continue
+
+    # Standart pano boşsa, birincil seçimi (fareyle seçili metni) dene
+    try:
+        from src.tools.os_input import read_primary_selection
+        prim = read_primary_selection()
+        if prim:
+            return prim
+    except Exception:
+        pass
+
     return ""
+
 
 
 # ──────────────────────────────────────────────────────────
@@ -849,20 +877,87 @@ class ToolExecutor:
         action = (args.get("action") or "").strip()
         if not action:
             return tr("Hata: 'action' parametresi boş.")
-        if self.browser_sender is None:
-            return (
-                tr("Tarayıcı bağlantısı yok (eklenti sunucusu çalışmıyor). Kullanıcıya tarayıcı eklentisini kurmasını hatırlat.")
-            )
+
         command = {"action": action}
         if args.get("text"):
             command.setdefault("params", {})["text"] = args["text"]
         if args.get("url"):
             command.setdefault("params", {})["url"] = args["url"]
-        try:
-            self.browser_sender(command)
-        except Exception as e:
-            return tr("Tarayıcı komutu gönderilemedi: {e}").format(e=e)
-        return tr("Tarayıcı komutu gönderildi: {action}").format(action=action)
+        if args.get("coordinate"):
+            command.setdefault("params", {})["coordinate"] = args["coordinate"]
+        if args.get("button"):
+            command.setdefault("params", {})["button"] = args["button"]
+
+        # 1. Eğer eklenti bağlıysa ve komut iletildiyse:
+        extension_sent = False
+        if self.browser_sender is not None:
+            try:
+                res = self.browser_sender(command)
+                if res is not False and res is not None:
+                    extension_sent = True
+            except Exception as e:
+                logger.debug(f"Eklentiye gönderim başarısız: {e}")
+
+        if extension_sent:
+            return tr("Tarayıcı komutu gönderildi: {action}").format(action=action)
+
+        # 2. Eklenti yoksa veya bağlı istemci yoksa: İşletim sistemi seviyesinde otomasyon
+        from src.tools import os_input
+
+        if action == "new_tab":
+            url = args.get("url") or "https://google.com"
+            ok, msg = os_input.open_url(url)
+            return tr("Yeni sekme açıldı: {url}").format(url=url) if ok else tr("Sekme açılamadı: {msg}").format(msg=msg)
+
+        elif action == "close_tab":
+            ok, msg = os_input.send_key_combination("ctrl+w")
+            return tr("Aktif sekme kapatıldı (Ctrl+W)") if ok else tr("Sekme kapatılamadı: {msg}").format(msg=msg)
+
+        elif action == "scroll_down":
+            ok, msg = os_input.send_key_combination("pagedown")
+            return tr("Sayfa aşağı kaydırıldı (PageDown)") if ok else tr("Kaydırılamadı: {msg}").format(msg=msg)
+
+        elif action == "scroll_up":
+            ok, msg = os_input.send_key_combination("pageup")
+            return tr("Sayfa yukarı kaydırıldı (PageUp)") if ok else tr("Kaydırılamadı: {msg}").format(msg=msg)
+
+        elif action == "fill_form":
+            text = args.get("text") or ""
+            ok, msg = os_input.type_text(text)
+            return tr("Metin yazıldı") if ok else tr("Metin yazılamadı: {msg}").format(msg=msg)
+
+        elif action == "click":
+            coord = args.get("coordinate")
+            x, y = None, None
+            if coord and "," in str(coord):
+                try:
+                    parts = str(coord).replace("(", "").replace(")", "").split(",")
+                    x, y = int(parts[0].strip()), int(parts[1].strip())
+                except Exception:
+                    pass
+
+            # Koordinat yok ama aranacak metin verilmişse ekranda ara
+            if (x is None or y is None) and args.get("text"):
+                found = os_input.find_text_on_screen(args["text"])
+                if found:
+                    x, y = found
+
+            button_type = (args.get("button") or "left").lower()
+            double_click = (button_type == "double")
+            click_btn = "left" if double_click else button_type
+            ok, msg = os_input.click(x, y, button=click_btn, double=double_click)
+            if ok:
+                loc = f"({x}, {y})" if (x is not None and y is not None) else ""
+                return tr("Tıklama yapıldı {loc}").format(loc=loc).strip() if loc else tr("Tıklama yapıldı")
+            return tr("Tıklama başarısız: {msg}").format(msg=msg)
+
+        elif action == "press_key":
+            key = args.get("text") or args.get("key") or "enter"
+            ok, msg = os_input.send_key_combination(key)
+            return tr("Tuşa basıldı: {key}").format(key=key) if ok else tr("Tuşa basılamadı: {msg}").format(msg=msg)
+
+        return tr("Bilinmeyen tarayıcı işlemi: {action}").format(action=action)
+
 
     def _tool_web_search(self, args):
         query = (args.get("query") or "").strip()

@@ -28,6 +28,23 @@ else
     echo "Uyarı: 'pacman', 'apt', 'dnf' veya 'zypper' bulunamadı. Lütfen 'portaudio', 'tesseract' ve OCR dil paketlerinin sisteminizde kurulu olduğundan emin olun."
 fi
 
+echo "[1/4] Eklentisiz masaüstü kontrolü için isteğe bağlı araçlar (best-effort)..."
+# v1.5.0: os_input modülü ydotool/xdotool + wl-clipboard/xclip kullanır.
+# Bunlar yoksa uygulama pynput'a düşer; kurulum asla burada takılmaz.
+if command -v pacman &> /dev/null; then
+    sudo pacman -S --needed --noconfirm ydotool xdotool wl-clipboard xclip || \
+        echo "Not: bazı isteğe bağlı araçlar kurulamadı (pynput yedeği devrede)."
+elif command -v apt-get &> /dev/null; then
+    sudo apt-get install -y ydotool xdotool wl-clipboard xclip || \
+        echo "Not: bazı isteğe bağlı araçlar kurulamadı (pynput yedeği devrede)."
+elif command -v dnf &> /dev/null; then
+    sudo dnf install -y ydotool xdotool wl-clipboard xclip || \
+        echo "Not: bazı isteğe bağlı araçlar kurulamadı (pynput yedeği devrede)."
+elif command -v zypper &> /dev/null; then
+    sudo zypper install -y -n ydotool xdotool wl-clipboard xclip || \
+        echo "Not: bazı isteğe bağlı araçlar kurulamadı (pynput yedeği devrede)."
+fi
+
 echo "[2/4] Python Sanal Ortamı (venv) kuruluyor..."
 
 # Homebrew veya Conda gibi harici Python kurulumlarının Linux ses (PulseAudio)

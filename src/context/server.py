@@ -12,13 +12,27 @@ signals = ExtensionSignals()
 # Global queues for SSE clients
 sse_clients = []
 
+def has_active_clients():
+    """Aktif bağlı tarayıcı eklentisi istemcisi olup olmadığını bildirir."""
+    return len(sse_clients) > 0
+
 def send_browser_command(command_dict):
+    """
+    Eklentiye komut gönderir.
+    Bağlı en az bir istemciye iletildiyse True döner.
+    """
+    if not sse_clients:
+        return False
     msg = f"data: {json.dumps(command_dict)}\n\n"
-    for q in sse_clients:
+    sent = 0
+    for q in list(sse_clients):
         try:
             q.put(msg)
-        except:
+            sent += 1
+        except Exception:
             pass
+    return sent > 0
+
 
 class ExtensionRequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):

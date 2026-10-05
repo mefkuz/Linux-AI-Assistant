@@ -66,7 +66,8 @@ class LLMClient:
                 "sonra cevapla — ASLA 'göremiyorum/erişemiyorum' deme, önce ilgili aracı dene: "
                 "`read_screen_text` (ekran OCR), `get_clipboard_text` (pano), "
                 "`read_file`/`list_directory` (dosya), `run_shell_command` (terminal), "
-                "`browser_action` (tarayıcı), `web_search`+`fetch_web_page` (İNTERNET: "
+                "`browser_action` (tarayıcı ve arayüz kontrolü: sekme, form, tıklama, tuş), "
+                "`web_search`+`fetch_web_page` (İNTERNET: "
                 "güncel bilgi gerektiğinde MUTLAKA bunları kullan; shell ile web kazıma YASAK)."
             )
 
