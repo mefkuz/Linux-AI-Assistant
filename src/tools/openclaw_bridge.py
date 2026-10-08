@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 # Token tasarrufu tavanı (~1000 token civarı)
 MAX_OPENCLAW_RESPONSE_CHARS = 4000
 
+# Cloudflare WAF / bot korumasını tetiklememek için standart istemci başlığı
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 
 def _extract_response_text(data: Any, raw_fallback: str) -> str:
     """Farklı API formatlarından (OpenAI compatible, OpenClaw Agent, Webhook) metni ayıklar."""
@@ -75,30 +81,26 @@ def ask_openclaw_gateway(
     if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
         return {"ok": False, "response": "", "error": "Endpoint http:// veya https:// ile başlamalıdır."}
 
-    # URL çözümleme:
+    # URL Çözümleme:
+    # Kullanıcı yalnızca kök adres girdiyse (örn: https://openclaw.mefkuz.com),
+    # OpenClaw'ın standart OpenAI-uyumlu sohbet endpoint'i olan /v1/chat/completions kullanılır.
     if "/v1/" in endpoint or "/api/" in endpoint or "/webhook" in endpoint:
         url = endpoint
     else:
-        url = f"{endpoint}/api/agent/{agent_id}/run"
+        url = f"{endpoint}/v1/chat/completions"
 
-    # OpenAI v1 uyumluluğu
-    if "/v1/" in url:
-        payload = {
-            "messages": [{"role": "user", "content": prompt.strip()}],
-            "stream": False
-        }
-    else:
-        payload = {
-            "message": prompt.strip(),
-            "stream": False
-        }
-        if session_key:
-            payload["sessionKey"] = session_key
+    payload = {
+        "model": "openclaw",
+        "messages": [
+            {"role": "user", "content": prompt.strip()}
+        ],
+        "stream": False
+    }
 
     data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "Linux-AI-Assistant/1.0 (Outbound-AirGap-Client)"
+        "User-Agent": BROWSER_USER_AGENT
     }
     if token and token.strip():
         headers["Authorization"] = f"Bearer {token.strip()}"
