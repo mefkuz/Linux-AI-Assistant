@@ -1,10 +1,11 @@
 """
 OpenClaw Tek Yönlü İstemci Köprüsü (Outbound-Only Air-Gap Bridge)
 
-Güvenlik ilkeleri:
+Güvenlik İlkeleri:
 1. Dinleyen port / soket / webhook YOKTUR (Inbound port: 0).
 2. Tüm iletişimi Linux AI Assistant başlatır (Outbound HTTP/HTTPS).
-3. Gelen yanıt yalnızca saf metin/markdown olarak ele alınır, yerel olarak asla kod veya komut çalıştırmaz.
+3. Gelen yanıt yalnızca saf metin/markdown olarak ele alınır; yerel olarak asla kod veya komut çalıştırmaz.
+4. Token-frugal mimari: Dönen metin aşırı uzunsa (~4000 karakter) kontrollü olarak kırpılır.
 """
 
 import json
@@ -14,6 +15,36 @@ import urllib.error
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+# Token tasarrufu tavanı (~1000 token civarı)
+MAX_OPENCLAW_RESPONSE_CHARS = 4000
+
+
+def _extract_response_text(data: Any, raw_fallback: str) -> str:
+    """Farklı API formatlarından (OpenAI compatible, OpenClaw Agent, Webhook) metni ayıklar."""
+    if isinstance(data, dict):
+        # 1. Standart OpenAI / v1 formatı: choices[0].message.content
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            first_choice = choices[0]
+            if isinstance(first_choice, dict):
+                msg = first_choice.get("message")
+                if isinstance(msg, dict) and msg.get("content"):
+                    return str(msg.get("content")).strip()
+                if first_choice.get("text"):
+                    return str(first_choice.get("text")).strip()
+
+        # 2. OpenClaw / Agentic API anahtarları
+        for key in ("response", "reply", "text", "content", "result", "output"):
+            val = data.get(key)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+
+        # 3. İçiçe mesaj objesi
+        if "message" in data and isinstance(data["message"], str):
+            return data["message"].strip()
+
+    return raw_fallback.strip()
 
 
 def ask_openclaw_gateway(
@@ -25,7 +56,7 @@ def ask_openclaw_gateway(
     session_key: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    OpenClaw Gateway HTTP endpoint'ine tek yönlü prompt iletir.
+    OpenClaw Gateway veya OpenAI-uyumlu uç noktaya tek yönlü prompt iletir.
     
     Dönüş formatı:
     {
@@ -44,21 +75,30 @@ def ask_openclaw_gateway(
     if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
         return {"ok": False, "response": "", "error": "Endpoint http:// veya https:// ile başlamalıdır."}
 
-    # OpenClaw webhook/chat API yapısı
-    # /api/agent/run veya /v1/chat/completions veya gateway prompt endpoint
-    url = f"{endpoint}/api/agent/{agent_id}/run" if "/api/" not in endpoint else endpoint
+    # URL çözümleme:
+    if "/v1/" in endpoint or "/api/" in endpoint or "/webhook" in endpoint:
+        url = endpoint
+    else:
+        url = f"{endpoint}/api/agent/{agent_id}/run"
 
-    payload = {
-        "message": prompt.strip(),
-        "stream": False
-    }
-    if session_key:
-        payload["sessionKey"] = session_key
+    # OpenAI v1 uyumluluğu
+    if "/v1/" in url:
+        payload = {
+            "messages": [{"role": "user", "content": prompt.strip()}],
+            "stream": False
+        }
+    else:
+        payload = {
+            "message": prompt.strip(),
+            "stream": False
+        }
+        if session_key:
+            payload["sessionKey"] = session_key
 
     data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "Linux-AI-Assistant/1.0 (Outbound-Client)"
+        "User-Agent": "Linux-AI-Assistant/1.0 (Outbound-AirGap-Client)"
     }
     if token and token.strip():
         headers["Authorization"] = f"Bearer {token.strip()}"
@@ -67,28 +107,20 @@ def ask_openclaw_gateway(
 
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            status = resp.status
             body_bytes = resp.read()
             body_str = body_bytes.decode("utf-8", errors="replace")
             
             try:
                 res_json = json.loads(body_str)
-                # Yanıt ayıklama
-                if isinstance(res_json, dict):
-                    # Yaygın anahtarlar: response, reply, text, content, result
-                    reply = (
-                        res_json.get("response") or
-                        res_json.get("reply") or
-                        res_json.get("text") or
-                        res_json.get("content") or
-                        res_json.get("result") or
-                        body_str
-                    )
-                    return {"ok": True, "response": str(reply).strip(), "error": None}
-                else:
-                    return {"ok": True, "response": body_str.strip(), "error": None}
+                reply = _extract_response_text(res_json, raw_fallback=body_str)
             except json.JSONDecodeError:
-                return {"ok": True, "response": body_str.strip(), "error": None}
+                reply = body_str.strip()
+
+            # Token tasarrufu kontrolü
+            if len(reply) > MAX_OPENCLAW_RESPONSE_CHARS:
+                reply = reply[:MAX_OPENCLAW_RESPONSE_CHARS] + "\n... (OpenClaw yanıtı uzun olduğu için kesildi)"
+
+            return {"ok": True, "response": reply, "error": None}
 
     except urllib.error.HTTPError as e:
         err_body = ""
