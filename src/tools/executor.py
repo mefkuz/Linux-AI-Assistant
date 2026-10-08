@@ -334,7 +334,8 @@ def get_openai_tools():
             "function": {
                 "name": "ask_openclaw",
                 "description": (
-                    "Uzak OpenClaw sunucu asistanına (Zaman) tek yönlü görev veya soru iletir. "
+                    "Uzak OpenClaw sunucu asistanına görev veya soru iletir. "
+                    "Dönen yanıta göre devam soruları sorabilir veya ek detay isteyebilirsin. "
                     "Sunucu tarafındaki otomasyonlar, servis durumları, takvim, notlar veya "
                     "derin araştırmalar için kullanılır. Bilgisayar üzerinde hiçbir port açmaz."
                 ),
@@ -343,7 +344,7 @@ def get_openai_tools():
                     "properties": {
                         "task": {
                             "type": "string",
-                            "description": "OpenClaw asistanına iletilecek görev veya soru metni.",
+                            "description": "OpenClaw asistanına iletilecek görev, soru veya devam sorusu.",
                         },
                     },
                     "required": ["task"],

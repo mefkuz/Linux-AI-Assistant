@@ -89,10 +89,13 @@ def ask_openclaw_gateway(
     else:
         url = f"{endpoint}/v1/chat/completions"
 
+    # Açık ve standart kimlik başlığı ekleyerek OpenClaw tarafının kimle konuştuğunu bilmesini sağla
+    formatted_prompt = f"[Linux PC Assistant (User's Personal Desktop AI)]: {prompt.strip()}"
+
     payload = {
         "model": "openclaw",
         "messages": [
-            {"role": "user", "content": prompt.strip()}
+            {"role": "user", "content": formatted_prompt}
         ],
         "stream": False
     }
@@ -104,6 +107,8 @@ def ask_openclaw_gateway(
     }
     if token and token.strip():
         headers["Authorization"] = f"Bearer {token.strip()}"
+    if session_key and session_key.strip():
+        headers["x-openclaw-session-key"] = session_key.strip()
 
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 

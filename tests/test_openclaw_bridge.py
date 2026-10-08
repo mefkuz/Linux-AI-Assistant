@@ -93,6 +93,23 @@ class TestOpenClawBridge(unittest.TestCase):
         out = executor.execute_tool("ask_openclaw", {"task": "Sunucuya bak"})
         self.assertIn("kapalı", out)
 
+    @patch("urllib.request.urlopen")
+    def test_formatted_prompt_header(self, mock_urlopen):
+        import json
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'{"response": "AnladÄ±m."}'
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
+
+        res = ask_openclaw_gateway("Test mesaj", "https://openclaw.mefkuz.com", token="secret")
+        self.assertTrue(res["ok"])
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        data = json.loads(req.data.decode('utf-8'))
+        sent_content = data["messages"][0]["content"]
+        self.assertIn("[Linux PC Assistant", sent_content)
+        self.assertIn("Test mesaj", sent_content)
+
     @patch("src.tools.openclaw_bridge.ask_openclaw_gateway")
     def test_executor_enabled_runs_bridge(self, mock_bridge):
         mock_bridge.return_value = {"ok": True, "response": "İşlem tamamlandı."}
