@@ -50,7 +50,7 @@ DEFAULT_SETTINGS = {
 
     # OpenClaw Entegrasyonu (Tek Yönlü Dışa İstemci / Outbound-only)
     "openclaw_enabled": False,       # GUI üzerinden açılıp kapatılabilir
-    "openclaw_endpoint": "https://openclaw.mefkuz.com",
+    "openclaw_endpoint": "https://your-openclaw-domain.com",
     "openclaw_token": "",
     "openclaw_timeout": 60,
 

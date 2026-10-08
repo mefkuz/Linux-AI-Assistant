@@ -776,10 +776,17 @@ class SettingsWindow(QWidget):
 
     def _init_ui(self):
         self.setWindowTitle(tr("Linux AI Assistant — Ayarlar"))
-        self.setFixedSize(650, 480)
+        self.setFixedSize(720, 510)
 
         root = QVBoxLayout(self)
         tabs = QTabWidget()
+        tabs.setUsesScrollButtons(False)
+        tabs.setStyleSheet("""
+            QTabBar::tab {
+                padding: 6px 10px;
+                min-width: 60px;
+            }
+        """)
 
         # ── SEKME 1: Genel ────────────────────────────────
         tab_general = QWidget()
@@ -1142,7 +1149,7 @@ class SettingsWindow(QWidget):
         
         _oc_desc = (
             "<b>OpenClaw Asimetrik Köprüsü (Hava Boşluklu / Tek Yönlü İstemci)</b><br><br>"
-            "Linux AI Assistant, sunucudaki OpenClaw asistanına (Zaman) görev ve soru iletebilir.<br>"
+            "Linux AI Assistant, uzak OpenClaw asistanınıza görev ve soru iletebilir.<br>"
             "<b>Güvenlik Garantisi:</b> Bilgisayarınızda hiçbir dinleme portu açılmaz. İletişimi yalnızca "
             "bu bilgisayar başlatır. OpenClaw bilgisayarınızı tetikleyemez veya kod çalıştıramaz."
             if _APP_LANG == "tr" else
@@ -1164,8 +1171,8 @@ class SettingsWindow(QWidget):
 
         oc_form = QFormLayout()
         self.oc_endpoint_input = QLineEdit()
-        self.oc_endpoint_input.setPlaceholderText("https://openclaw.mefkuz.com")
-        self.oc_endpoint_input.setText(self.settings.get("openclaw_endpoint", "https://openclaw.mefkuz.com"))
+        self.oc_endpoint_input.setPlaceholderText("https://your-openclaw-domain.com")
+        self.oc_endpoint_input.setText(self.settings.get("openclaw_endpoint", "https://your-openclaw-domain.com"))
         oc_form.addRow(tr("Sunucu Adresi (Endpoint):"), self.oc_endpoint_input)
 
         self.oc_token_input = QLineEdit()
