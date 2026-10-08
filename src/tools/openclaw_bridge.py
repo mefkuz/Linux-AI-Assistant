@@ -107,8 +107,10 @@ def ask_openclaw_gateway(
     }
     if token and token.strip():
         headers["Authorization"] = f"Bearer {token.strip()}"
-    if session_key and session_key.strip():
-        headers["x-openclaw-session-key"] = session_key.strip()
+
+    # Oturum adlandırma: Boşsa veya verilmediyse standart ve anlaşılır oturum anahtarı ata
+    effective_session = (session_key or "linux-ai-assistant:desktop").strip()
+    headers["x-openclaw-session-key"] = effective_session
 
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
