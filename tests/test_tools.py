@@ -29,13 +29,13 @@ def check(name, cond, detail=""):
 
 # 1. Şema geçerliliği ------------------------------------------------
 tools = get_openai_tools()
-check("11 araç tanımlı", len(tools) == 11, f"bulunan: {len(tools)}")
+check("12 araç tanımlı", len(tools) == 12, f"bulunan: {len(tools)}")
 names = {t["function"]["name"] for t in tools}
 check("beklenen araç adları",
       names == {"run_shell_command", "read_file", "write_file", "append_file", "list_directory",
                 "get_clipboard_text", "read_screen_text",
                 "get_active_window_context", "browser_action",
-                "web_search", "fetch_web_page"},
+                "web_search", "fetch_web_page", "ask_openclaw"},
       str(names))
 check("tüm şemalar function tipinde",
       all(t.get("type") == "function" and "parameters" in t["function"] for t in tools))
@@ -43,7 +43,7 @@ check("tüm şemalar function tipinde",
 # 2. Salt-okunurluk ve hassas-okuma kümeleri -------------------------------
 check("read_only seti doğru",
       READ_ONLY_TOOLS == {"read_file", "list_directory", "get_active_window_context",
-                          "web_search", "fetch_web_page"})
+                          "web_search", "fetch_web_page", "ask_openclaw"})
 check("sensitive seti doğru",
       set(SENSITIVE_READ_TOOLS) == {"read_screen_text", "get_clipboard_text"})
 
@@ -648,7 +648,7 @@ check("boş metin boş döner", pick_relevant_sections("", "x") == "")
 # 32. Şema token cimriliği: toplam açıklama uzunluğu tavanı -------------------
 import json as _json
 _schema_chars = len(_json.dumps(tools, ensure_ascii=False))
-check("11 araç şeması 6000 karakter altında",
+check("12 araç şeması 6500 karakter altında",
       _schema_chars < 6000, f"şema={_schema_chars} karakter")
 
 # 33. Üst-sınır sonrası özet garantisi (5090 senaryosu) -------------------------

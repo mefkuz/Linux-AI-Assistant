@@ -45,6 +45,7 @@ READ_ONLY_TOOLS = {
     "get_active_window_context",
     "web_search",
     "fetch_web_page",
+    "ask_openclaw",
 }
 
 # Hassas okuma araçları: side-effect yok ama özel veri okur (ekran görüntüsü,
@@ -325,6 +326,27 @@ def get_openai_tools():
                         },
                     },
                     "required": ["url"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ask_openclaw",
+                "description": (
+                    "Uzak OpenClaw sunucu asistanına (Zaman) tek yönlü görev veya soru iletir. "
+                    "Sunucu tarafındaki otomasyonlar, servis durumları, takvim, notlar veya "
+                    "derin araştırmalar için kullanılır. Bilgisayar üzerinde hiçbir port açmaz."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "task": {
+                            "type": "string",
+                            "description": "OpenClaw asistanına iletilecek görev veya soru metni.",
+                        },
+                    },
+                    "required": ["task"],
                 },
             },
         },
@@ -1015,3 +1037,31 @@ class ToolExecutor:
             logger.warning(f"Sayfa okuma hatası ({url[:80]}): {e}")
             return tr("Sayfa okunamadı ({e}). web_search ile başka bir adres dene.").format(
                 e=truncate_error(e, 200))
+
+    def _tool_ask_openclaw(self, args):
+        task = (args.get("task") or "").strip()
+        if not task:
+            return tr("Hata: 'task' parametresi boş.")
+
+        # Ayarlardan etkin olup olmadığını denetle
+        enabled = self.settings.get("openclaw_enabled", False) if self.settings else False
+        if not enabled:
+            return tr("OpenClaw köprüsü ayarlarda kapalı. Kullanıcı Ayarlar -> OpenClaw sekmesinden aktif edebilir.")
+
+        endpoint = (self.settings.get("openclaw_endpoint", "") if self.settings else "").strip()
+        if not endpoint:
+            return tr("OpenClaw endpoint adresi ayarlanmamış.")
+
+        token = self.settings.get("openclaw_token", "") if self.settings else ""
+        timeout = int(self.settings.get("openclaw_timeout", 60) if self.settings else 60)
+
+        try:
+            from src.tools.openclaw_bridge import ask_openclaw_gateway
+            res = ask_openclaw_gateway(prompt=task, endpoint=endpoint, token=token, timeout=timeout)
+            if res.get("ok"):
+                return f"[OpenClaw Yanıtı]:\n{res.get('response', '')}"
+            else:
+                return tr("OpenClaw ile iletişim hatası: {err}").format(err=res.get("error", "Bilinmeyen hata"))
+        except Exception as e:
+            logger.error(f"OpenClaw aracı çağrılırken hata: {e}")
+            return tr("OpenClaw köprü hatası: {e}").format(e=str(e))

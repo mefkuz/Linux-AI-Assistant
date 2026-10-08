@@ -48,6 +48,12 @@ DEFAULT_SETTINGS = {
     "require_confirm_on_tool": False, # Her araç çalıştırmadan önce onay iste
     "tool_max_iterations": 8,         # Agentic döngü üst sınırı
 
+    # OpenClaw Entegrasyonu (Tek Yönlü Dışa İstemci / Outbound-only)
+    "openclaw_enabled": False,       # GUI üzerinden açılıp kapatılabilir
+    "openclaw_endpoint": "https://openclaw.mefkuz.com",
+    "openclaw_token": "",
+    "openclaw_timeout": 60,
+
     # Konuşma geçmişi (hafıza)
     "history_max_turns": 6,           # Tutulacak diyalog turu (0 = hafıza kapalı)
 

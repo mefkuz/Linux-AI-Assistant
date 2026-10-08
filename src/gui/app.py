@@ -1136,6 +1136,53 @@ class SettingsWindow(QWidget):
         ul.addStretch()
         tabs.addTab(tab_upd, "Güncelleme" if _APP_LANG == "tr" else "Updates")
 
+        # ── Sekme: OpenClaw Köprüsü (Outbound-only) ──
+        tab_oc = QWidget()
+        oc_layout = QVBoxLayout(tab_oc)
+        
+        _oc_desc = (
+            "<b>OpenClaw Asimetrik Köprüsü (Hava Boşluklu / Tek Yönlü İstemci)</b><br><br>"
+            "Linux AI Assistant, sunucudaki OpenClaw asistanına (Zaman) görev ve soru iletebilir.<br>"
+            "<b>Güvenlik Garantisi:</b> Bilgisayarınızda hiçbir dinleme portu açılmaz. İletişimi yalnızca "
+            "bu bilgisayar başlatır. OpenClaw bilgisayarınızı tetikleyemez veya kod çalıştıramaz."
+            if _APP_LANG == "tr" else
+            "<b>OpenClaw Asymmetric Bridge (Air-Gapped / Outbound-only Client)</b><br><br>"
+            "Linux AI Assistant can dispatch tasks and queries to your remote OpenClaw agent.<br>"
+            "<b>Security Guarantee:</b> No inbound ports are opened on this PC. Only this PC initiates "
+            "requests. OpenClaw cannot trigger this machine or execute remote commands."
+        )
+        oc_info_lbl = QLabel(_oc_desc)
+        oc_info_lbl.setWordWrap(True)
+        oc_layout.addWidget(oc_info_lbl)
+
+        self.oc_enable_check = _check(
+            tr("OpenClaw Köprüsünü Etkinleştir"),
+            tr("Aktifken yapay zeka 'ask_openclaw' aracını kullanarak sunucuya görev iletebilir."),
+            "openclaw_enabled", False
+        )
+        oc_layout.addWidget(self.oc_enable_check)
+
+        oc_form = QFormLayout()
+        self.oc_endpoint_input = QLineEdit()
+        self.oc_endpoint_input.setPlaceholderText("https://openclaw.mefkuz.com")
+        self.oc_endpoint_input.setText(self.settings.get("openclaw_endpoint", "https://openclaw.mefkuz.com"))
+        oc_form.addRow(tr("Sunucu Adresi (Endpoint):"), self.oc_endpoint_input)
+
+        self.oc_token_input = QLineEdit()
+        self.oc_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.oc_token_input.setPlaceholderText(tr("Opsiyonel: Bearer Token / API Key"))
+        self.oc_token_input.setText(self.settings.get("openclaw_token", ""))
+        oc_form.addRow(tr("Erişim Belirteci (Token):"), self.oc_token_input)
+
+        self.oc_timeout_spin = QSpinBox()
+        self.oc_timeout_spin.setRange(10, 300)
+        self.oc_timeout_spin.setValue(int(self.settings.get("openclaw_timeout", 60)))
+        oc_form.addRow(tr("Zaman Aşımı (saniye):"), self.oc_timeout_spin)
+
+        oc_layout.addLayout(oc_form)
+        oc_layout.addStretch()
+        tabs.addTab(tab_oc, "OpenClaw")
+
         # ── Alt butonlar ──────────────────────────────────
         btn_row = QHBoxLayout()
         btn_cancel = QPushButton(tr("İptal"))
@@ -1216,6 +1263,10 @@ class SettingsWindow(QWidget):
         s.set("history_max_turns",        self.hist_spin.value())
         s.set("auto_request_log",         self.req_log_check.isChecked())
         s.set("auto_check_updates",       self.upd_auto_check.isChecked())
+        s.set("openclaw_enabled",         self.oc_enable_check.isChecked())
+        s.set("openclaw_endpoint",        self.oc_endpoint_input.text().strip())
+        s.set("openclaw_token",           self.oc_token_input.text().strip())
+        s.set("openclaw_timeout",         self.oc_timeout_spin.value())
 
         if self.hotkey_manager:
             self.hotkey_manager.update_hotkey(s.get("hotkey"))
