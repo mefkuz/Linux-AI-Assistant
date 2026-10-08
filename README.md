@@ -7,7 +7,7 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 ## Key Features
 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
-- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 11 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser/desktop (tabs, scrolling, forms, clicks, key presses — works with or without the browser extension), and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
+- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 12 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser/desktop (tabs, scrolling, forms, clicks, key presses — works with or without the browser extension), and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
 - **Conversation Memory (NEW!):** The AI remembers the last N dialogue turns (configurable, default 6). Follow-ups like "add that to the file you just opened" work naturally. Clear it anytime from the tray menu.
 - **Zero-Token Request Logs (NEW!):** Every request is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` by the PC itself — the AI no longer spends tool calls and tokens on logging. Toggleable in Settings → Security.
 - **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms, click buttons, press keys). Even without the extension, the AI can control tabs, scrolling, typing, clicks and key presses at OS level (Wayland + X11).
@@ -25,7 +25,7 @@ Notes for non-git installs (ZIP download): in-place update isn't possible — th
 
 ## Tool Calling
 
-When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes), the model receives 11 function tools and calls them as needed — no keywords required:
+When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes), the model receives 12 function tools and calls them as needed — no keywords required:
 
 | Tool | What it does |
 |---|---|

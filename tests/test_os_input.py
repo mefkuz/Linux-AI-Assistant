@@ -159,7 +159,7 @@ set_language("tr")
 # 10. Şema boyutu testi
 tools = get_openai_tools()
 schema_str = str(tools)
-check("11 araç şeması 6000 karakter altında", len(schema_str) < 6000, f"boyut: {len(schema_str)}")
+check("12 araç şeması 6500 karakter altında", len(schema_str) < 6500, f"boyut: {len(schema_str)}")
 
 print(f"\n{len(PASS)} geçti, {len(FAIL)} kaldı.")
 if FAIL:
