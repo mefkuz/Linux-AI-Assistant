@@ -3,6 +3,7 @@ import logging
 import os
 from src.llm.cli_registry import KNOWN_CLI_TOOLS, build_cli_command
 from src.core.i18n import tr
+from src.tools.questions import UserQuestionCancelled, question_was_cancelled, clarification_question
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +17,21 @@ def _short_err(text, limit=500):
 
 
 class LLMClient:
-    def __init__(self, settings=None, confirm_callback=None, browser_sender=None):
+    def __init__(self, settings=None, confirm_callback=None, browser_sender=None, question_callback=None):
         self.settings = settings
         self.confirm_callback = confirm_callback
         self.browser_sender = browser_sender
+        self.question_callback = question_callback
         # Son generate_response çağrısında kullanılan araç adları.
         # src/gui/app.py'deki [EKRANDA_GOSTER] fallback heuristic'i için.
         self.last_tools_used = []
         # Konuşma geçmişi: [{"role": "user"|"assistant", "content": str}, ...]
-        # Sadece ham kullanıcı sorusu + final asistan yanıtı tutulur
-        # (tool çağrıları ve enjekte edilen bağlam dahil edilmez).
+        # Kullanıcı sorusu, varsa açıklama yanıtları ve final asistan yanıtı
+        # tutulur; diğer tool çağrıları ve enjekte edilen bağlam tutulmaz.
         self.history = []
+        self.last_error = None
+        self._clarifications = []
+        self.last_cancelled = False
 
     def generate_response(self, system_prompt, user_prompt, context=None, skip_injection=False,
                             use_history=True):
@@ -38,6 +43,9 @@ class LLMClient:
         use_history:  False ise geçmiş okunmaz ve yazılmaz (iç analiz/düzeltme çağrıları)
         """
         mode = "local"
+        self.last_error = None
+        self._clarifications = []
+        self.last_cancelled = False
         if self.settings:
             mode = self.settings.get("llm_mode", "local")
         use_history = use_history and not skip_injection
@@ -54,13 +62,19 @@ class LLMClient:
             )
 
         if not skip_injection:
+            system_prompt += (
+                "\n\n[İSTEK SINIRI]: Yalnızca kullanıcının en son isteğini yerine getir. "
+                "Önceki konuşmalar bağlamdır; tamamlanmış işlemleri yeni bir talimat gibi "
+                "tekrar çalıştırma. Kullanıcı önceki bir tercihi/sonucu hatırlamanı istiyorsa "
+                "geçmişten yanıtla; yeni bir işlem istemedikçe dosya yazma veya komut çalıştırma."
+            )
             workspace = self.settings.get("workspace_dir", "").strip() if self.settings else ""
             if workspace:
                 system_prompt += f"\n\n[ÖNEMLİ BİLGİ]: Kullanıcının şu anki aktif çalışma dizini (workspace) şudur: {workspace}. Dosya oluşturma veya okuma işlemlerini kesinlikle bu dizinde yapmalısın."
 
         # Tool calling aktifken (remote/local): model araçları bilsin ve
         # "ekranı göremiyorum" gibi eski talimatlarla çelişmesin.
-        if mode in ("remote", "local") and not skip_injection and self._tool_calling_enabled():
+        if self.supports_app_tools() and not skip_injection and self._tool_calling_enabled():
             system_prompt += (
                 "\n\n[ARAÇLAR]: Fonksiyon araçların var. Gereken veriyi önce araçla al, "
                 "sonra cevapla — ASLA 'göremiyorum/erişemiyorum' deme, önce ilgili aracı dene: "
@@ -69,9 +83,14 @@ class LLMClient:
                 "`browser_action` (tarayıcı ve arayüz kontrolü: sekme, form, tıklama, tuş), "
                 "`web_search`+`fetch_web_page` (İNTERNET: "
                 "güncel bilgi gerektiğinde MUTLAKA bunları kullan; shell ile web kazıma YASAK)."
+                " Kullanıcının isteğini gerçekleştirmek için gerekli bilgi eksik veya belirsizse "
+                "`ask_user` ile sor ve yanıtı kullanarak devam et. Geçmişte zaten verilmiş bilgiyi "
+                "tekrar sorma. Kullanıcı iptal ederse bağımlı işlemleri yapma; tahmin etme."
+                " AÇIKLAMA SORUSU normal yanıt değildir: 'Neyi kastettiniz?', 'Hangisini "
+                "istiyorsunuz?' gibi soruları son yanıt olarak yazma; MUTLAKA ask_user çağır."
             )
 
-        if mode == "cli" and not skip_injection:
+        if mode == "cli" and not self._is_codex() and not skip_injection:
             require_confirm = self.settings.get("require_confirm_on_write", True) if self.settings else True
             if require_confirm:
                 system_prompt += (
@@ -91,14 +110,17 @@ class LLMClient:
         try:
             if mode == "remote":
                 resp_text = self._call_remote(system_prompt, full_prompt,
-                                              history=self._recent_history() if use_history else None)
+                                              history=self._recent_history() if use_history else None,
+                                              allow_tools=not skip_injection)
             elif mode == "cli":
                 self.last_tools_used = []
                 resp_text = self._call_cli(system_prompt, full_prompt,
-                                           history=self._recent_history() if use_history else None)
+                                           history=self._recent_history() if use_history else None,
+                                           allow_tools=not skip_injection)
             else:
                 resp_text = self._call_local(system_prompt, full_prompt,
-                                             history=self._recent_history() if use_history else None)
+                                             history=self._recent_history() if use_history else None,
+                                             allow_tools=not skip_injection)
 
             import re
             print(f"[DEBUG] Ham API Çıktısı: {repr(resp_text)}", flush=True)
@@ -115,7 +137,11 @@ class LLMClient:
                 self._remember(user_prompt, resp_clean)
 
             return resp_clean
+        except UserQuestionCancelled:
+            self.last_cancelled = True
+            return tr("Yanıt verilmedi; işlem durduruldu.") + " [EKRANDA_GOSTER]"
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"LLM hatası ({mode}): {e}")
             return tr("[LLM Hatası ({mode})]: {e}").format(mode=mode, e=str(e))
 
@@ -140,6 +166,10 @@ class LLMClient:
     def _remember(self, user_prompt, assistant_reply):
         """Bir turu geçmişe ekler, limiti aşan eski turları atar."""
         limit = self._history_limit()
+        if self._clarifications:
+            import json
+            user_prompt += "\n\n[Kullanıcının açıklama yanıtları]:\n" + json.dumps(
+                self._clarifications, ensure_ascii=False)
         self.history.append({"role": "user", "content": user_prompt})
         self.history.append({"role": "assistant", "content": assistant_reply})
         if limit <= 0:
@@ -150,15 +180,23 @@ class LLMClient:
     def clear_history(self):
         """Konuşma geçmişini sıfırlar (örn. tray menüsünden)."""
         self.history = []
+        self._clarifications = []
 
-    def _call_local(self, system_prompt, user_prompt, history=None):
+    def _ask_user(self, request):
+        from src.tools.questions import ask_in_terminal
+        answer = (self.question_callback or ask_in_terminal)(request)
+        if isinstance(answer, str) and answer.strip():
+            self._clarifications.append({"question": request["question"], "answer": answer.strip()})
+        return answer
+
+    def _call_local(self, system_prompt, user_prompt, history=None, allow_tools=True):
         import requests
         url   = self.settings.get("local_api_url",  "http://localhost:8080/v1/chat/completions") if self.settings else "http://localhost:8080/v1/chat/completions"
         model = self.settings.get("local_model",    "local-model") if self.settings else "local-model"
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history or [])
         messages.append({"role": "user", "content": user_prompt})
-        if self._tool_calling_enabled():
+        if allow_tools and self._tool_calling_enabled():
             return self._chat_with_tools(url, None, model, messages, timeout=60)
         self.last_tools_used = []
         resp = requests.post(url, json={
@@ -172,7 +210,7 @@ class LLMClient:
 
         return resp.json()["choices"][0]["message"]["content"]
 
-    def _call_remote(self, system_prompt, user_prompt, history=None):
+    def _call_remote(self, system_prompt, user_prompt, history=None, allow_tools=True):
         import requests
         if not self.settings:
             raise ValueError(tr("Uzak mod için ayarlar yüklenmedi."))
@@ -185,7 +223,7 @@ class LLMClient:
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history or [])
         messages.append({"role": "user", "content": user_prompt})
-        if self._tool_calling_enabled():
+        if allow_tools and self._tool_calling_enabled():
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             return self._chat_with_tools(url, headers, model, messages, timeout=30)
         self.last_tools_used = []
@@ -206,6 +244,13 @@ class LLMClient:
         if self.settings:
             return bool(self.settings.get("enable_tool_calling", True))
         return False
+
+    def _is_codex(self):
+        return bool(self.settings and self.settings.get("llm_cli_tool_key", "") == "codex (OpenAI)")
+
+    def supports_app_tools(self):
+        mode = self.settings.get("llm_mode", "local") if self.settings else "local"
+        return mode in ("remote", "local") or (mode == "cli" and self._is_codex())
     def _tool_max_iterations(self):
         if self.settings:
             try:
@@ -226,6 +271,7 @@ class LLMClient:
             settings=self.settings,
             confirm_callback=self.confirm_callback,
             browser_sender=self.browser_sender,
+            question_callback=self._ask_user,
         )
         tools = get_openai_tools()
         max_iter = self._tool_max_iterations()
@@ -252,7 +298,22 @@ class LLMClient:
             tool_calls = message.get("tool_calls") or []
 
             if not tool_calls:
-                return message.get("content") or ""
+                content = message.get("content") or ""
+                question = clarification_question(content)
+                if question:
+                    result = executor.execute_tool("ask_user", {"question": question})
+                    if "ask_user" not in self.last_tools_used:
+                        self.last_tools_used.append("ask_user")
+                    if question_was_cancelled("ask_user", result):
+                        raise UserQuestionCancelled()
+                    import json
+                    answer = json.loads(result)["answer"]
+                    messages.extend([
+                        {"role": "assistant", "content": question},
+                        {"role": "user", "content": "Açıklama sorusuna yanıtım: " + answer},
+                    ])
+                    continue
+                return content
 
             # Asistanın tool çağrı mesajını geçmişe ekle (OpenAI formatı gereği)
             messages.append({
@@ -261,10 +322,20 @@ class LLMClient:
                 "tool_calls": tool_calls,
             })
 
-            for call in tool_calls:
+            has_question = any(c.get("function", {}).get("name") == "ask_user" for c in tool_calls)
+            # Model-prepared actions in a question's batch cannot yet reflect
+            # the user's answer. Ask first and have the model regenerate those
+            # actions with the new information before anything is executed.
+            for call in sorted(tool_calls, key=lambda c: c.get("function", {}).get("name") != "ask_user"):
                 func = call.get("function", {}) or {}
                 name = func.get("name", "")
                 arguments = func.get("arguments", "{}") or "{}"
+                if has_question and name != "ask_user":
+                    messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                                     "name": name, "content": (
+                                         "Action deferred. Read the user's clarification answer and "
+                                         "call this tool again with arguments based on that answer.")})
+                    continue
                 logger.info(f"Tool çağrısı: {name} {str(arguments)[:200]}")
                 print(f"[TOOL] {name} çağrılıyor...", flush=True)
                 result = executor.execute_tool(name, arguments)
@@ -277,6 +348,8 @@ class LLMClient:
                     "name": name,
                     "content": result,
                 })
+                if question_was_cancelled(name, result):
+                    raise UserQuestionCancelled()
 
         logger.warning(f"Tool döngüsü üst sınıra ulaştı ({max_iter}), son yanıt döndürülüyor.")
         # Üst sınıra ulaşıldıysa son bir tools'suz çağrı ile özet yanıt al.
@@ -309,6 +382,8 @@ class LLMClient:
             # Böylece cevap ASLA "İşlem tamamlandı, Loglar'a bak" gibi
             # içi boş bir mesaja düşmez.
             content = self._compile_tool_results(messages)
+        if clarification_question(content):
+            raise RuntimeError("Açıklama sorusu limiti doldu; istek tamamlanamadı.")
         return content
 
     def _compile_tool_results(self, messages):
@@ -339,7 +414,7 @@ class LLMClient:
             "(Araç limiti dolduğu için ham sonuçlar derlendi — özetlenemedi.)")
         return f"{header}\n\n{joined} [EKRANDA_GOSTER]"
 
-    def _call_cli(self, system_prompt, user_prompt, history=None):
+    def _call_cli(self, system_prompt, user_prompt, history=None, allow_tools=True):
         """
         Registry'den seçilen CLI aracını kullanarak prompt'u stdin üzerinden gönderir.
         Araç kendi yöntemini (stdin/arg) ve model formatını registry'den alır.
@@ -350,6 +425,21 @@ class LLMClient:
         tool_key   = self.settings.get("llm_cli_tool_key", "agy (Antigravity)")
         model      = self.settings.get("llm_cli_model", "").strip() or None
         extra_args = self.settings.get("llm_cli_extra_args", "").strip()
+
+        if self._is_codex():
+            from src.llm.codex import CodexSession
+            from src.tools.executor import ToolExecutor, get_openai_tools
+            executor = ToolExecutor(settings=self.settings,
+                                    confirm_callback=self.confirm_callback,
+                                    browser_sender=self.browser_sender,
+                                    question_callback=self._ask_user)
+            tools = get_openai_tools() if allow_tools and self._tool_calling_enabled() else []
+            workspace = self.settings.get("workspace_dir", "").strip() or os.path.expanduser("~")
+            with CodexSession(workspace, extra_args=extra_args,
+                              timeout=self.settings.get("codex_timeout", 180)) as session:
+                return session.generate(system_prompt, user_prompt, history or [], model,
+                                        tools, executor, self.last_tools_used,
+                                        self._tool_max_iterations())
 
         # Registry'den komutu oluştur
         cfg = KNOWN_CLI_TOOLS.get(tool_key)
@@ -364,7 +454,8 @@ class LLMClient:
 
         # Ek argümanlar varsa ekle
         if extra_args:
-            cmd += extra_args.split()
+            import shlex
+            cmd += shlex.split(extra_args)
 
         # Prompt'u hazırla (CLI araçları tek metin alır, geçmiş düz metne çevrilir)
         full_input = system_prompt
