@@ -7,7 +7,7 @@ While there are many AI assistants available for Windows and macOS, Linux power 
 ## Key Features
 
 - **Unobtrusive Overlay UI:** Operates in the background with a minimal, non-blocking overlay that stays out of your way.
-- **Tool Calling (NEW!):** In Remote/Local API modes the AI can use 12 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser/desktop (tabs, scrolling, forms, clicks, key presses — works with or without the browser extension), and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
+- **Tool Calling (NEW!):** In Remote/Local API modes and Codex terminal mode the AI can use 13 function tools on its own — run shell commands, read/write/append files, read your screen (OCR) and clipboard, check the active window, control the browser/desktop (tabs, scrolling, forms, clicks, key presses — works with or without the browser extension), and search/read the web (DuckDuckGo, no API key). Dangerous commands and sensitive reads ask for confirmation first.
 - **Conversation Memory (NEW!):** The AI remembers the last N dialogue turns (configurable, default 6). Follow-ups like "add that to the file you just opened" work naturally. Clear it anytime from the tray menu.
 - **Zero-Token Request Logs (NEW!):** Every request is automatically logged to `Loglar/YYYY-MM-DD-<request>-log.md` by the PC itself — the AI no longer spends tool calls and tokens on logging. Toggleable in Settings → Security.
 - **Browser Extension Integration:** A two-way communication bridge that lets the AI read your Gmail, PDFs, and YouTube videos, and lets you voice-control the browser (scroll, close tabs, auto-fill forms, click buttons, press keys). Even without the extension, the AI can control tabs, scrolling, typing, clicks and key presses at OS level (Wayland + X11).
@@ -25,7 +25,7 @@ Notes for non-git installs (ZIP download): in-place update isn't possible — th
 
 ## Tool Calling
 
-When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes), the model receives 12 function tools and calls them as needed — no keywords required:
+When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes and Codex terminal mode), the model receives 13 function tools and calls them as needed — no keywords required:
 
 | Tool | What it does |
 |---|---|
@@ -38,6 +38,8 @@ When **Tool Calling** is enabled (Settings → Security, active in Remote/Local 
 | `browser_action` | Controls the browser/desktop (new/close tab, scroll, fill form, click button or coordinate, press key — extension preferred, OS-level fallback) |
 | `web_search` | Searches the web (DuckDuckGo, no API key): titles + URLs + snippets |
 | `fetch_web_page` | Downloads a page as clean text (menus/ads stripped, query-focused trim) |
+| `ask_openclaw` | Sends a task to the configured OpenClaw gateway (when enabled) |
+| `ask_user` | Asks a clarification question, with optional choices and a free-text answer |
 
 Token-frugal by design: tool schemas are kept short, search snippets are capped (~200 chars each), fetched pages are trimmed to ~4000 chars with question-relevant paragraphs picked locally in Python (zero LLM tokens) instead of dumping whole pages into context.
 
@@ -47,6 +49,59 @@ Token-frugal by design: tool schemas are kept short, search snippets are capped 
 3. Dangerous shell commands (`rm`, `sudo`, …) always ask for confirmation, even with confirmations off — file tools can never silently escape the workspace, and any attempt to read/write outside the assigned workspace (via file tools or shell paths like `cat /etc/passwd`) raises a dedicated red **workspace-escape dialog** (one-time allow or block) instead of a plain confirm box.
 
 Every tool call is logged to `Loglar/araclar-YYYY-MM-DD.md`, and models/servers that don't support the `tools` parameter automatically fall back to plain chat.
+
+## Codex terminal integration
+
+Install OpenAI Codex CLI and authenticate with `codex login`. This integration was verified with `codex-cli 0.169.0`; it requires an app-server version supporting experimental dynamic tools. It uses your Codex login and does not require the app's remote API key.
+
+In **Settings → AI → Terminal (CLI) → AI Tool**, select **codex (OpenAI)** and save. Leave Model empty to use your Codex default, or enter a model available to your account. The optional extra arguments support `-c model_reasoning_effort=low`, `-c model_verbosity=low`, and `-c service_tier=default`. Permission and transport overrides are rejected.
+
+For a terminal chat session:
+
+```bash
+./venv/bin/python main.py --ai codex --workspace /path/to/project
+# Optional: --model <model-available-to-your-account>
+```
+
+The terminal reads saved settings; these command-line overrides apply only to the current session. The GUI continues to use the saved provider. To use Codex for voice commands, select it in Settings.
+
+Codex receives the **same 13 tool schemas** as the HTTP API and calls the **same ToolExecutor**: file read/write/append/list, shell, screen OCR, clipboard, active window, browser/desktop control, web search, page reading, and OpenClaw. Screen/clipboard approval, workspace escape approval, write/command confirmation settings, browser extension routing and OS fallback, and tool/request logs are shared. Conversation memory, context attachments, response display markers and internal dictation/analysis calls use the existing application pipeline. OpenClaw still requires its own configured endpoint and enable switch.
+
+Each request starts an ephemeral Codex thread with the app's bounded conversation history. Clear Memory clears subsequent Codex context too. Internal dictation calls receive no tools or history. Native shell/image tools, web search and unrelated MCP servers are disabled; native action approvals are declined so actions go through the application's permission checks. No permission-bypass flag is used. Model generation has a configurable `codex_timeout` (default 180 seconds); time spent in application tools/confirmation dialogs is excluded. Subprocesses are stopped and reaped after success or failure. Model/login/protocol failures are shown explicitly, without silently switching provider.
+
+Verification:
+
+```bash
+./venv/bin/python tests/test_codex.py -v
+./venv/bin/python -m unittest discover -s tests -v
+# Opt-in: uses the authenticated Codex model; may consume account usage.
+./venv/bin/python tests/manual/test_codex_live.py
+```
+
+The live test requires the model to invoke all 13 tools. File and shell operations run in a temporary workspace; desktop, web and OpenClaw I/O use fixtures while their real application handlers and permission checks run. Physical microphone/OCR availability, browser extension connection and external service availability still depend on your Linux session, as they do in API mode.
+
+## Clarification questions (API and Codex)
+
+When an instruction lacks information needed to carry it out, the AI can call `ask_user` and wait for your answer. This works in Remote/Local API modes and Codex terminal mode while Tool Calling is enabled.
+
+The model is instructed to call `ask_user` for clarification rather than writing the question as a final response. A conservative fallback also recognizes short direct clarification replies (such as “Neyi kastettiniz?”), opens the same question dialog and continues with the answer. Ordinary explanations containing question marks are kept as responses. Codex continues in the same thread so its previous context and tools are preserved.
+
+The GUI uses the same native dialog layout as the existing confirmation windows. Choose an offered answer (up to six choices), or type your own answer and press Send. Nothing is selected or submitted automatically. Closing the window or pressing Cancel stops the request and its remaining tool actions. The overlay reports cancellation instead of success. Questions do not trigger a second permission dialog; file/command permissions continue to apply separately.
+
+The question dialog also has a **microphone icon**. Click it, speak, then pause: the transcript is inserted into the answer field, preserving the other text. It is **never submitted automatically**; edit it if needed and press Send. During recording, the icon becomes a stop button that cancels voice input. Closing the question stops recording and discards late transcription results. Microphone or speech-service failures are shown in the same dialog and leave typing available. Voice answers use the existing speech language and speech-recognition service; no new dependency is required.
+
+In terminal chat, type an option number or your own text. `/cancel`, Ctrl+C or end-of-input cancels the question. End-of-input also exits terminal chat cleanly.
+
+The answer is returned to the model so it can continue the task. When conversation memory is enabled, clarification answers are included in the stored user turn so follow-ups can use them; Clear Memory removes them. Internal dictation cleanup has no tools and cannot open questions. If an API response batches a question with prewritten actions, those actions are deferred until the model has seen the answer and generates updated calls.
+
+For example, asking to create a note while leaving its filename unspecified lets the model ask for the name before writing the file. Cancelling that question leaves the file unchanged.
+
+```bash
+./venv/bin/python tests/test_questions.py -v
+./venv/bin/python tests/test_question_voice.py -v
+# Opt-in live tests: real Codex and saved API; temporary files, no visible windows.
+./venv/bin/python tests/manual/test_questions_live.py
+```
 
 ## Conversation Memory
 

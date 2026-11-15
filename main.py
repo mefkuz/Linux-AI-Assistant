@@ -41,6 +41,14 @@ logging.basicConfig(
 logging.getLogger().setLevel(logging.WARNING)
 
 def main():
+    import argparse
+    from src.core.settings import SettingsManager
+    parser = argparse.ArgumentParser(description="Linux AI Assistant")
+    parser.add_argument("--ai", choices=["codex", "local", "remote"],
+                        help="Bu oturumda kullanılacak AI aracı")
+    parser.add_argument("--model", help="Bu oturumda kullanılacak model")
+    parser.add_argument("--workspace", help="Bu oturumun çalışma dizini")
+    args = parser.parse_args()
     print("=====================================================")
     print("=      Linux AI Assistant ve Yapay Zeka Entegratörü     =")
     print("=====================================================")
@@ -52,7 +60,20 @@ def main():
         load_dotenv()
     
     # Router başlat (Otomatik olarak LLM ve CLI Client'ları ayağa kaldırır)
-    router = Router()
+    settings = SettingsManager().settings.copy()
+    if args.ai:
+        settings["llm_mode"] = "cli" if args.ai == "codex" else args.ai
+        if args.ai == "codex":
+            if settings.get("llm_cli_tool_key") != "codex (OpenAI)":
+                settings["llm_cli_model"] = ""
+                settings["llm_cli_extra_args"] = ""
+            settings["llm_cli_tool_key"] = "codex (OpenAI)"
+    if args.model:
+        model_key = {"cli": "llm_cli_model", "local": "local_model", "remote": "remote_model"}
+        settings[model_key[settings.get("llm_mode")]] = args.model
+    if args.workspace:
+        settings["workspace_dir"] = os.path.abspath(os.path.expanduser(args.workspace))
+    router = Router(settings=settings)
     try:
         set_language(router.settings.get("app_language", "tr") if router.settings else "tr")
     except Exception:
@@ -76,6 +97,9 @@ def main():
             # Yanıtı Bastırma
             print(f"\n[Linux AI Assistant] >> {response}")
             
+        except EOFError:
+            print("\n" + tr("Oturum sonlandırılıyor..."))
+            break
         except KeyboardInterrupt:
             print("\n" + tr("Oturum sonlandırılıyor...") + " (Ctrl+C)")
             break

@@ -10,6 +10,14 @@ Her araç için:
 """
 
 KNOWN_CLI_TOOLS = {
+    "codex (OpenAI)": {
+        "binary": "codex",
+        "input_method": "app-server",
+        "model_flag": None,  # Model app-server thread/start isteğinde iletilir.
+        "models": [],
+        "supports_model": True,
+        "description": "OpenAI Codex — API ile aynı uygulama araçları ve güvenlik onayları",
+    },
     "agy (Antigravity)": {
         "binary": "agy",
         "input_method": "stdin",

@@ -21,12 +21,12 @@ class FakeSettings:
 class TestOpenClawBridge(unittest.TestCase):
 
     def test_empty_prompt(self):
-        res = ask_openclaw_gateway("", "https://openclaw.mefkuz.com")
+        res = ask_openclaw_gateway("", "https://openclaw.example.com")
         self.assertFalse(res["ok"])
         self.assertIn("Boş", res["error"])
 
     def test_invalid_endpoint(self):
-        res = ask_openclaw_gateway("Test soru", "ftp://openclaw.mefkuz.com")
+        res = ask_openclaw_gateway("Test soru", "ftp://openclaw.example.com")
         self.assertFalse(res["ok"])
         self.assertIn("http", res["error"])
 
@@ -58,7 +58,7 @@ class TestOpenClawBridge(unittest.TestCase):
         mock_resp.read.return_value = b'{"response": "Merhaba, sunucu durumu iyi."}'
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        res = ask_openclaw_gateway("Sunucu durumu nasıl?", "https://openclaw.mefkuz.com", token="secret")
+        res = ask_openclaw_gateway("Sunucu durumu nasıl?", "https://openclaw.example.com", token="secret")
         self.assertTrue(res["ok"])
         self.assertEqual(res["response"], "Merhaba, sunucu durumu iyi.")
         self.assertIsNone(res["error"])
@@ -71,7 +71,7 @@ class TestOpenClawBridge(unittest.TestCase):
         mock_resp.read.return_value = f'{{"response": "{long_content}"}}'.encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        res = ask_openclaw_gateway("Uzun yanıt iste", "https://openclaw.mefkuz.com")
+        res = ask_openclaw_gateway("Uzun yanıt iste", "https://openclaw.example.com")
         self.assertTrue(res["ok"])
         self.assertIn("kesildi", res["response"])
         self.assertTrue(len(res["response"]) <= MAX_OPENCLAW_RESPONSE_CHARS + 100)
@@ -83,7 +83,7 @@ class TestOpenClawBridge(unittest.TestCase):
         mock_resp.read.return_value = b'D\xc3\xbcz metin yan\xc4\xb1t.'
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        res = ask_openclaw_gateway("Test", "https://openclaw.mefkuz.com")
+        res = ask_openclaw_gateway("Test", "https://openclaw.example.com")
         self.assertTrue(res["ok"])
         self.assertEqual(res["response"], "Düz metin yanıt.")
 
@@ -98,10 +98,10 @@ class TestOpenClawBridge(unittest.TestCase):
         import json
         mock_resp = MagicMock()
         mock_resp.status = 200
-        mock_resp.read.return_value = b'{"response": "AnladÄ±m."}'
+        mock_resp.read.return_value = '{"response": "Anladım."}'.encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
-        res = ask_openclaw_gateway("Test mesaj", "https://openclaw.mefkuz.com", token="secret")
+        res = ask_openclaw_gateway("Test mesaj", "https://openclaw.example.com", token="secret")
         self.assertTrue(res["ok"])
         call_args = mock_urlopen.call_args
         req = call_args[0][0]
@@ -115,7 +115,7 @@ class TestOpenClawBridge(unittest.TestCase):
         mock_bridge.return_value = {"ok": True, "response": "İşlem tamamlandı."}
         settings = FakeSettings({
             "openclaw_enabled": True,
-            "openclaw_endpoint": "https://openclaw.mefkuz.com",
+            "openclaw_endpoint": "https://openclaw.example.com",
             "openclaw_token": "secret-token",
             "openclaw_timeout": 30
         })
@@ -125,7 +125,7 @@ class TestOpenClawBridge(unittest.TestCase):
         self.assertIn("[OpenClaw Yanıtı]", out)
         mock_bridge.assert_called_once_with(
             prompt="Görevi yap",
-            endpoint="https://openclaw.mefkuz.com",
+            endpoint="https://openclaw.example.com",
             token="secret-token",
             timeout=30
         )

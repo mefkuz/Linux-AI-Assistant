@@ -12,6 +12,12 @@ Varsayılan TR'dir; GUI açılışta ve dil değişiminde set_language() çağı
 _lang = "tr"
 
 TRANSLATIONS = {
+    "Ses algılanamadı. Tekrar deneyebilirsin.": "No speech detected. You can try again.",
+    "Ses anlaşılamadı. Tekrar deneyebilir veya yanıtını yazabilirsin.": "Speech could not be understood. Try again or type your answer.",
+    "Ses tanıma servisine ulaşılamadı. Yanıtını yazarak gönderebilirsin.": "Speech recognition service is unavailable. You can type your answer.",
+    "Mikrofon kullanılamadı. Yanıtını yazarak gönderebilirsin.": "Microphone is unavailable. You can type your answer.",
+    "Yanıt (seçenek numarası veya metin; /cancel = iptal): ": "Answer (option number or text; /cancel to cancel): ",
+    "Yanıt verilmedi; işlem durduruldu.": "No answer was provided; the operation was stopped.",
     # Onay diyalogları (araç çalıştırma)
     "Komut çalıştırılsın mı?": "Run this command?",
     "Şu komut çalıştırılacak:": "The following command will run:",

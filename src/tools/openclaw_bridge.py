@@ -82,7 +82,7 @@ def ask_openclaw_gateway(
         return {"ok": False, "response": "", "error": "Endpoint http:// veya https:// ile başlamalıdır."}
 
     # URL Çözümleme:
-    # Kullanıcı yalnızca kök adres girdiyse (örn: https://openclaw.mefkuz.com),
+    # Kullanıcı yalnızca kök adres girdiyse (örn: https://openclaw.example.com),
     # OpenClaw'ın standart OpenAI-uyumlu sohbet endpoint'i olan /v1/chat/completions kullanılır.
     if "/v1/" in endpoint or "/api/" in endpoint or "/webhook" in endpoint:
         url = endpoint

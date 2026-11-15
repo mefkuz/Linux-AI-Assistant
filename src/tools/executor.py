@@ -20,6 +20,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 
 from src.core.security import SecurityManager, detect_workspace_escapes
@@ -46,6 +47,7 @@ READ_ONLY_TOOLS = {
     "web_search",
     "fetch_web_page",
     "ask_openclaw",
+    "ask_user",
 }
 
 # Hassas okuma araçları: side-effect yok ama özel veri okur (ekran görüntüsü,
@@ -131,6 +133,22 @@ def truncate_error(text, limit=500):
 def get_openai_tools():
     """OpenAI chat/completions 'tools' parametresi için şema listesi."""
     return [
+        {
+            "type": "function",
+            "function": {
+                "name": "ask_user",
+                "description": "Eksik veya belirsiz bilgiyi kullanıcıya sor; yanıtı bekle. İsteğe bağlı seçenekler sun. İptalde tahmin etme, görevi durdur.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+                        "options": {"type": "array", "maxItems": 6, "items": {
+                            "type": "string", "minLength": 1, "maxLength": 200}},
+                    },
+                    "required": ["question"],
+                },
+            },
+        },
         {
             "type": "function",
             "function": {
@@ -384,35 +402,37 @@ def read_screen_via_ocr():
     import os as _os
     import subprocess as _sp
     import time as _time
-    ss_path = "/tmp/ai_dikte_screen.png"
-    txt_path = "/tmp/ai_dikte_screen"
     best = ""
-    try:
+    # Independent private paths prevent concurrent requests from reading a
+    # stale screenshot or deleting each other's files. Missing/hung capture
+    # programs must not prevent trying another installed backend.
+    with tempfile.TemporaryDirectory(prefix="linux-ai-ocr-") as directory:
+        ss_path = _os.path.join(directory, "screen.png")
+        txt_path = _os.path.join(directory, "screen")
+        commands = [
+            ["grim", ss_path],
+            ["spectacle", "-b", "-n", "-f", "-o", ss_path],
+            ["gnome-screenshot", "-f", ss_path],
+        ]
         for attempt in range(3):
             if attempt:
                 _time.sleep(0.5)
-            if _sp.run(["grim", ss_path], capture_output=True).returncode != 0:
-                # grim yoksa/çalışmazsa spectacle (KDE), sonra gnome-screenshot
-                if _sp.run(["spectacle", "-b", "-n", "-o", ss_path],
-                           capture_output=True).returncode != 0:
-                    _sp.run(["gnome-screenshot", "-f", ss_path], capture_output=True)
-            if not _os.path.exists(ss_path):
-                continue
-            text = _ocr_image(ss_path, txt_path)
-            if len(text) > len(best):
-                best = text
-            if len(best) > 20:
-                break
-    except Exception as e:
-        logger.error(f"OCR Hatası: {e}")
-    finally:
-        try:
-            if _os.path.exists(ss_path):
-                _os.remove(ss_path)
-            if _os.path.exists(txt_path + ".txt"):
-                _os.remove(txt_path + ".txt")
-        except OSError:
-            pass
+            for command in commands:
+                if shutil.which(command[0]) is None:
+                    continue
+                try:
+                    if _os.path.exists(ss_path):
+                        _os.remove(ss_path)
+                    result = _sp.run(command, capture_output=True, timeout=15)
+                    if result.returncode != 0 or not _os.path.exists(ss_path):
+                        continue
+                    text = _ocr_image(ss_path, txt_path)
+                    if len(text) > len(best):
+                        best = text
+                    if len(best) > 20:
+                        return best
+                except (OSError, _sp.TimeoutExpired) as exc:
+                    logger.warning("Ekran yakalama aracı çalışmadı (%s): %s", command[0], exc)
     return best
 
 
@@ -586,7 +606,7 @@ def fetch_url_as_text(url):
 # ──────────────────────────────────────────────────────────
 
 class ToolExecutor:
-    def __init__(self, settings=None, confirm_callback=None, browser_sender=None):
+    def __init__(self, settings=None, confirm_callback=None, browser_sender=None, question_callback=None):
         """
         settings:         SettingsManager (workspace_dir, require_confirm_on_tool okunur)
         confirm_callback: (display_text, explanation) -> bool
@@ -595,6 +615,7 @@ class ToolExecutor:
         self.settings = settings
         self.security = SecurityManager(confirm_callback=confirm_callback)
         self.browser_sender = browser_sender
+        self.question_callback = question_callback
 
     # -- ayar yardımcıları ---------------------------------
 
@@ -779,6 +800,19 @@ class ToolExecutor:
 
     # -- araç implementasyonları ----------------------------
 
+    def _tool_ask_user(self, args):
+        from src.tools.questions import validate_question, ask_in_terminal
+        request = validate_question(args)
+        callback = self.question_callback or ask_in_terminal
+        try:
+            answer = callback(request)
+        except (Exception, KeyboardInterrupt) as exc:
+            logger.warning("Kullanıcı sorusu yanıtlanamadı: %s", exc)
+            answer = None
+        if not isinstance(answer, str) or not answer.strip():
+            return json.dumps({"status": "cancelled", "answer": None}, ensure_ascii=False)
+        return json.dumps({"status": "answered", "answer": answer.strip()}, ensure_ascii=False)
+
     def _tool_run_shell_command(self, args):
         command = (args.get("command") or "").strip()
         if not command:
@@ -910,6 +944,8 @@ class ToolExecutor:
             command.setdefault("params", {})["coordinate"] = args["coordinate"]
         if args.get("button"):
             command.setdefault("params", {})["button"] = args["button"]
+        if args.get("key"):
+            command.setdefault("params", {})["key"] = args["key"]
 
         # 1. Eğer eklenti bağlıysa ve komut iletildiyse:
         extension_sent = False

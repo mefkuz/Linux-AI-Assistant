@@ -65,6 +65,22 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 
 TRANSLATIONS = {
+    "Sesle yanıtla": "Answer by voice",
+    "Sesli girişi iptal et": "Cancel voice input",
+    "Mikrofon hazırlanıyor...": "Preparing microphone...",
+    "Dinleniyor... Konuşman bitince metne çevrilecek.": "Listening... Your speech will be transcribed when you finish.",
+    "Ses metne çevriliyor...": "Transcribing speech...",
+    "Sesli giriş iptal edildi.": "Voice input cancelled.",
+    "Metin eklendi. Düzenleyip Gönder'e basabilirsin.": "Text added. You can edit it and press Send.",
+    "Sesli yanıt alınamadı. Yanıtını yazarak gönderebilirsin.": "Voice input failed. You can type your answer.",
+    "Ses algılanamadı. Tekrar deneyebilirsin.": "No speech detected. You can try again.",
+    "Yapay Zeka Sorusu": "AI Question",
+    "Yanıtını yaz...": "Type your answer...",
+    "Gönder": "Send",
+    "İptal": "Cancel",
+    "İşlem iptal edildi.": "The operation was cancelled.",
+    "İşlem tamamlanamadı.": "The operation could not be completed.",
+    "Araç Çağırma (Uzak/Yerel API, Codex)": "Tool Calling (Remote/Local API, Codex)",
     "Linux AI Assistant — Ayarlar": "Linux AI Assistant — Settings",
     "Genel": "General",
     "Dinleme": "Listening",
@@ -216,6 +232,7 @@ class Communicate(QObject):
     start_waveform = pyqtSignal()
     stop_waveform  = pyqtSignal()
     ask_confirm       = pyqtSignal(object, object, object) # summary_dict, result_list, threading.Event
+    ask_question      = pyqtSignal(object, object, object) # request, result_list, threading.Event
     ask_show_response = pyqtSignal(object, object) # result_list, threading.Event
     ask_clipboard     = pyqtSignal(object, object, str) # result_list, threading.Event, text
     show_response     = pyqtSignal(str) # text
@@ -606,6 +623,171 @@ class ConfirmDialog(QDialog):
         layout.addWidget(buttons)
 
 
+class QuestionVoiceSignals(QObject):
+    status = pyqtSignal(str)
+    finished = pyqtSignal(str, str, bool)
+
+
+class UserQuestionDialog(QDialog):
+    """Clarification using the same native layout as existing confirmations."""
+
+    def __init__(self, request, parent=None, settings=None):
+        super().__init__(parent)
+        self.answer = None
+        self._voice_settings = settings
+        self._voice_active = False
+        self._closed = False
+        self._voice_cancel = threading.Event()
+        self._voice_signals = QuestionVoiceSignals()
+        self._voice_signals.status.connect(self._voice_status, Qt.ConnectionType.QueuedConnection)
+        self._voice_signals.finished.connect(self._voice_finished, Qt.ConnectionType.QueuedConnection)
+        self.setWindowTitle(tr("Yapay Zeka Sorusu"))
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        question = QLabel(request["question"])
+        question.setTextFormat(Qt.TextFormat.PlainText)
+        question.setWordWrap(True)
+        layout.addWidget(question)
+        self.option_buttons = []
+        for option in request.get("options", []):
+            button = QPushButton(option)
+            button.setAutoDefault(False)
+            button.clicked.connect(lambda checked=False, value=option: self._choose_option(value))
+            self.option_buttons.append(button)
+            layout.addWidget(button)
+        self.answer_input = QTextEdit()
+        self.answer_input.setAcceptRichText(False)
+        self.answer_input.setPlaceholderText(tr("Yanıtını yaz..."))
+        self.answer_input.setMaximumHeight(120)
+        layout.addWidget(self.answer_input)
+        voice_row = QHBoxLayout()
+        self.microphone_button = QPushButton()
+        self.microphone_button.setAutoDefault(False)
+        self.microphone_button.setFixedSize(36, 36)
+        self.microphone_button.setIcon(self._voice_icon())
+        self.microphone_button.setToolTip(tr("Sesle yanıtla"))
+        self.microphone_button.setAccessibleName(tr("Sesle yanıtla"))
+        self.microphone_button.clicked.connect(self._toggle_voice)
+        voice_row.addWidget(self.microphone_button)
+        self.voice_status_label = QLabel()
+        self.voice_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.voice_status_label.setWordWrap(True)
+        voice_row.addWidget(self.voice_status_label, 1)
+        layout.addLayout(voice_row)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.send_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.send_button.setText(tr("Gönder"))
+        self.send_button.setEnabled(False)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("İptal"))
+        buttons.accepted.connect(self._submit_text)
+        buttons.rejected.connect(self.reject)
+        self.answer_input.textChanged.connect(self._update_send_state)
+        layout.addWidget(buttons)
+        self.answer_input.setFocus()
+
+    def _choose_option(self, option):
+        self.answer = option
+        self.accept()
+
+    def _submit_text(self):
+        answer = self.answer_input.toPlainText().strip()
+        if answer and not self._voice_active:
+            self.answer = answer
+            self.accept()
+
+    def _update_send_state(self):
+        self.send_button.setEnabled(bool(self.answer_input.toPlainText().strip()) and not self._voice_active)
+
+    def _voice_icon(self, stop=False):
+        icon = QIcon.fromTheme("media-playback-stop" if stop else "audio-input-microphone")
+        if not icon.isNull():
+            return icon
+        # A drawn icon keeps this a real icon even without an icon theme.
+        pixmap = QPixmap(24, 24)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self.palette().buttonText().color(), 2))
+        if stop:
+            painter.drawRect(6, 6, 12, 12)
+        else:
+            painter.drawRoundedRect(9, 2, 6, 13, 3, 3)
+            painter.drawArc(5, 6, 14, 14, 180 * 16, 180 * 16)
+            painter.drawLine(12, 20, 12, 23)
+            painter.drawLine(8, 23, 16, 23)
+        painter.end()
+        return QIcon(pixmap)
+
+    def _toggle_voice(self):
+        if self._voice_active:
+            self._voice_cancel.set()
+            self.microphone_button.setEnabled(False)
+            return
+        self._voice_cancel = threading.Event()
+        self._voice_active = True
+        self.microphone_button.setIcon(self._voice_icon(stop=True))
+        self.microphone_button.setToolTip(tr("Sesli girişi iptal et"))
+        self.microphone_button.setAccessibleName(tr("Sesli girişi iptal et"))
+        self.voice_status_label.setText(tr("Mikrofon hazırlanıyor..."))
+        for button in self.option_buttons:
+            button.setEnabled(False)
+        self._update_send_state()
+        signals, cancel, settings = self._voice_signals, self._voice_cancel, self._voice_settings
+
+        def record():
+            text, error = "", ""
+            try:
+                listener = AudioListener(settings=settings)
+                text = listener.listen_and_transcribe(cancel_event=cancel, status_callback=signals.status.emit) or ""
+                error = listener.last_error or ""
+            except Exception:
+                logger.exception("Sesli yanıt alınamadı.")
+                error = tr("Sesli yanıt alınamadı. Yanıtını yazarak gönderebilirsin.")
+            try:
+                signals.finished.emit(text, error, cancel.is_set())
+            except RuntimeError:
+                pass  # The application may already have closed.
+
+        self._voice_thread = threading.Thread(target=record, daemon=True)
+        self._voice_thread.start()
+
+    def _voice_status(self, status):
+        if self._closed:
+            return
+        messages = {"listening": "Dinleniyor... Konuşman bitince metne çevrilecek.",
+                    "transcribing": "Ses metne çevriliyor..."}
+        if status in messages:
+            self.voice_status_label.setText(tr(messages[status]))
+
+    def _voice_finished(self, text, error, cancelled):
+        if self._closed:
+            return
+        self._voice_active = False
+        self.microphone_button.setEnabled(True)
+        self.microphone_button.setIcon(self._voice_icon())
+        self.microphone_button.setToolTip(tr("Sesle yanıtla"))
+        self.microphone_button.setAccessibleName(tr("Sesle yanıtla"))
+        for button in self.option_buttons:
+            button.setEnabled(True)
+        if cancelled:
+            self.voice_status_label.setText(tr("Sesli giriş iptal edildi."))
+        elif text:
+            self.answer_input.insertPlainText(text)
+            self.voice_status_label.setText(tr("Metin eklendi. Düzenleyip Gönder'e basabilirsin."))
+        else:
+            self.voice_status_label.setText(error or tr("Ses algılanamadı. Tekrar deneyebilirsin."))
+        self._update_send_state()
+        self.answer_input.setFocus()
+
+    def done(self, result):
+        self._closed = True
+        self._voice_cancel.set()
+        super().done(result)
+
+
 class WorkspaceEscapeDialog(QDialog):
     """Workspace kaçış uyarısı: AI atanmış dizinin dışına çıkmak istiyor.
 
@@ -714,7 +896,12 @@ class ResponseWindow(QDialog):
         layout.setSpacing(10)
         
         # Etiket
-        lbl = QLabel("<b>" + tr("İşlem Tamamlandı.") + "</b>")
+        failed = text.lstrip().startswith(("[LLM Hatası", "[LLM Error"))
+        cancelled = text.lstrip().startswith(("Yanıt verilmedi; işlem durduruldu.",
+                                             "No answer was provided; the operation was stopped."))
+        heading = (tr("İşlem iptal edildi.") if cancelled else
+                   tr("İşlem tamamlanamadı.") if failed else tr("İşlem Tamamlandı."))
+        lbl = QLabel("<b>" + heading + "</b>")
         layout.addWidget(lbl)
         
         # Yanıt Alanı (Kopyalanabilir, Markdown destekli QTextBrowser)
@@ -1042,16 +1229,16 @@ class SettingsWindow(QWidget):
             "asks right before reading.",
             "auto_allow_clipboard")
 
-        _section(tr("Araç Çağırma (Uzak/Yerel API)"))
+        _section(tr("Araç Çağırma (Uzak/Yerel API, Codex)"))
         self.tool_enable_check = _check(
             tr("Araç Çağırma aktif"),
             "Yapay zeka dosya/komut/ekran/pano/tarayıcı/web-arama araçlarını kullanabilir.\n"
             "Aktifken eski keyword tabanlı pano/ekran enjeksiyonu devre dışı kalır.\n"
-            "Terminal (CLI) modunda etkisizdir."
+            "Terminal modunda Codex seçildiğinde de geçerlidir."
             if _APP_LANG == "tr" else
             "The AI can use file/command/screen/clipboard/browser/web-search tools.\n"
             "When on, legacy keyword-based clipboard/screen injection is disabled.\n"
-            "No effect in terminal (CLI) mode.",
+            "Also supported when Codex is selected in terminal mode.",
             "enable_tool_calling", True)
         self.tool_confirm_check = _check(
             tr("Dosya yazma ve komut çalıştırmadan önce sor"),
@@ -1214,9 +1401,10 @@ class SettingsWindow(QWidget):
         cfg = KNOWN_CLI_TOOLS.get(tool_key, {})
         models = cfg.get("models", [])
         self.cli_model_combo.clear()
-        if models:
+        if models or cfg.get("supports_model", False):
             self.cli_model_combo.addItems(models)
             self.cli_model_combo.setEnabled(True)
+            self.cli_model_combo.setPlaceholderText(tr("Model seçin veya yazın"))
         else:
             self.cli_model_combo.setPlaceholderText(tr("Bu araç model seçimi desteklemiyor"))
             self.cli_model_combo.setEnabled(False)
@@ -1292,7 +1480,7 @@ class SettingsWindow(QWidget):
 #  Ana Uygulama Yöneticisi
 # ──────────────────────────────────────────────────────────
 class AppManager:
-    def __init__(self):
+    def __init__(self, check_updates=True):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setApplicationName("Linux-AI-Assistant")
@@ -1310,7 +1498,8 @@ class AppManager:
         self._is_listening = False
         self._last_hotkey_time = 0
 
-        self.router = Router(settings=self.settings, confirm_callback=self._confirm_callback)
+        self.router = Router(settings=self.settings, confirm_callback=self._confirm_callback,
+                             question_callback=self._question_callback)
         self.audio    = AudioListener(settings=self.settings)
 
         self.comm = Communicate()
@@ -1321,6 +1510,7 @@ class AppManager:
         self.comm.start_waveform.connect(self._start_waveform, Q)
         self.comm.stop_waveform.connect(self._stop_waveform, Q)
         self.comm.ask_confirm.connect(self._ask_confirm_gui, Q)
+        self.comm.ask_question.connect(self._ask_question_gui, Q)
         self.comm.ask_show_response.connect(self._ask_show_response_gui, Q)
         self.comm.ask_clipboard.connect(self._ask_clipboard_gui, Q)
         self.comm.show_response.connect(self._show_response_gui, Q)
@@ -1352,7 +1542,7 @@ class AppManager:
         self._setup_tray()
         self._is_listening = False
         # Açılışta sessiz güncelleme denetimi (arka planda, ayara bağlı)
-        if self.settings.get("auto_check_updates", True):
+        if check_updates and self.settings.get("auto_check_updates", True):
             threading.Thread(target=self._check_updates_bg, args=(True,), daemon=True).start()
 
     def _check_updates_bg(self, silent):
@@ -1685,12 +1875,16 @@ class AppManager:
                 opt_prompt = "Düzeltilecek Kullanıcı Metni:\n\n" + text
                 try:
                     # Router'ın içindeki LLM Client üzerinden doğrudan soralım
-                    text = self.router.llm.generate_response(
+                    optimized = self.router.llm.generate_response(
                         system_prompt=opt_system,
                         user_prompt=opt_prompt,
                         skip_injection=True
                     ).strip()
-                    print(f"\n[İyileştirilmiş Dikte]: {text}\n", flush=True)
+                    if self.router.llm.last_error is None and optimized:
+                        text = optimized
+                        print(f"\n[İyileştirilmiş Dikte]: {text}\n", flush=True)
+                    else:
+                        logger.warning("Dikte düzeltme başarısız; özgün kullanıcı metni korunuyor.")
                 except Exception as e:
                     logger.error(f"Dikte iyileştirme hatası: {e}")
 
@@ -1703,7 +1897,7 @@ class AppManager:
             has_attachments = bool(getattr(self, '_context_queue', None))
             llm_mode = self.settings.get("llm_mode", "local")
             tool_path_active = (
-                llm_mode in ("remote", "local")
+                self.router.llm.supports_app_tools()
                 and self.settings.get("enable_tool_calling", True)
             )
 
@@ -1841,6 +2035,19 @@ class AppManager:
             
             if not self._is_listening:
                 return
+
+            # Connection/authentication failures must be visible in the same
+            # response window as API replies, never as background success.
+            if self.router.llm.last_error is not None:
+                self.comm.hide_overlay.emit()
+                self._is_listening = False
+                self.comm.show_response.emit(response)
+                return
+
+            if self.router.llm.last_cancelled:
+                self.comm.update_text.emit(tr("İşlem iptal edildi."))
+                time.sleep(1.2)
+                return
             
             wants_popup = False
             import re
@@ -1906,6 +2113,25 @@ class AppManager:
         self.comm.ask_confirm.emit(summary, result, ev)
         ev.wait()
         return result[0]
+
+    def _question_callback(self, request):
+        result = [None]
+        event = threading.Event()
+        self.comm.ask_question.emit(request, result, event)
+        event.wait()
+        return result[0]
+
+    def _ask_question_gui(self, request, result_list, event):
+        try:
+            self._play_notification_sound()
+            dialog = UserQuestionDialog(request, settings=getattr(self, "settings", None))
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                result_list[0] = dialog.answer
+        except Exception:
+            logger.exception("Kullanıcı sorusu gösterilemedi.")
+        finally:
+            # Closing/cancelling a question always releases the model worker.
+            event.set()
 
     def _play_notification_sound(self):
         import subprocess

@@ -182,7 +182,9 @@ def send_key_combination(combo_name):
             release = " ".join(f"{c}:0" for c in reversed(codes))
             args = (press + " " + release).split()
             try:
-                r = subprocess.run(["ydotool", "key"] + args, capture_output=True, text=True, timeout=4)
+                r = subprocess.run(["ydotool", "key", "--key-delay=50"] + args,
+                                   env=dict(os.environ, YDOTOOL_SOCKET=get_ydotool_socket_path()),
+                                   capture_output=True, text=True, timeout=4)
                 if r.returncode == 0:
                     return True, f"ydotool ile tuş gönderildi: {combo_clean}"
             except Exception as e:

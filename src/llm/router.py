@@ -27,11 +27,11 @@ class Router:
         "Önceki konuşmaları hatırlıyorsun; kullanıcının göndermeleri ('az önce', 'ona ekle' vb.) için geçmişe bak. Net cevaplar ver."
     )
 
-    def __init__(self, settings=None, confirm_callback=None, browser_sender=None):
+    def __init__(self, settings=None, confirm_callback=None, browser_sender=None, question_callback=None):
         self.settings = settings
         self.cli = CLIExecutor(settings=settings, confirm_callback=confirm_callback)
         self.llm = LLMClient(settings=settings, confirm_callback=confirm_callback,
-                             browser_sender=browser_sender)
+                             browser_sender=browser_sender, question_callback=question_callback)
 
     def set_browser_sender(self, browser_sender):
         """Extension server hazır olduktan sonra tarayıcı bağlantısını enjekte eder."""

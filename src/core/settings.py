@@ -35,6 +35,7 @@ DEFAULT_SETTINGS = {
     "llm_cli_tool_key": "agy (Antigravity)",  # KNOWN_CLI_TOOLS'daki anahtar
     "llm_cli_model": "",                       # Seçilen model (yoksa boş)
     "llm_cli_extra_args": "",                  # Opsiyonel ek argümanlar
+    "codex_timeout": 180,                     # Model yanıt süresi (saniye)
 
     # Kullanıcı tanımlı CLI yönlendirme araçları (router)
     "custom_cli_tools": ["antigravity", "codex", "agy"],
@@ -44,7 +45,7 @@ DEFAULT_SETTINGS = {
     "allow_sudo": False,
 
     # Araç Çağırma (Tool Calling)
-    "enable_tool_calling": True,      # Master switch (remote/local modlarında geçerli)
+    "enable_tool_calling": True,      # Remote/local API ve Codex
     "require_confirm_on_tool": False, # Her araç çalıştırmadan önce onay iste
     "tool_max_iterations": 8,         # Agentic döngü üst sınırı
 
