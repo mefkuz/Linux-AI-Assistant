@@ -247,6 +247,28 @@ def tr(text):
         return TRANSLATIONS.get(text, text)
     return text
 
+def application_icon():
+    """Use the tray microphone for every application window."""
+    pix = QPixmap(64, 64)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Sade Mikrofon Çizimi
+    p.setBrush(QColor(80, 150, 255)) # Mavi mikrofon başlığı
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawRoundedRect(24, 12, 16, 26, 8, 8)
+
+    pen = QPen(QColor(180, 180, 180), 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.drawArc(18, 28, 28, 20, 0, -180 * 16) # U-Şeklinde Tutacak
+    p.drawLine(32, 48, 32, 54)              # Dikey Stand
+    p.drawLine(24, 54, 40, 54)              # Yatay Taban
+    p.end()
+
+    return QIcon(pix)
+
+
 class Communicate(QObject):
     show_overlay   = pyqtSignal()
     hide_overlay   = pyqtSignal()
@@ -1649,6 +1671,8 @@ class AppManager:
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setApplicationName("Linux-AI-Assistant")
+        self.app.setDesktopFileName("linux-ai-assistant")
+        self.app.setWindowIcon(application_icon())
         
         self._check_single_instance()
 
@@ -1872,24 +1896,7 @@ class AppManager:
             QTimer.singleShot(5000, _reset_text)
 
     def _setup_tray(self):
-        pix = QPixmap(64, 64)
-        pix.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pix)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Sade Mikrofon Çizimi
-        p.setBrush(QColor(80, 150, 255)) # Mavi mikrofon başlığı
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(24, 12, 16, 26, 8, 8)
-        
-        pen = QPen(QColor(180, 180, 180), 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.drawArc(18, 28, 28, 20, 0, -180 * 16) # U-Şeklinde Tutacak
-        p.drawLine(32, 48, 32, 54)              # Dikey Stand
-        p.drawLine(24, 54, 40, 54)              # Yatay Taban
-        p.end()
-
-        self.tray = QSystemTrayIcon(QIcon(pix), self.app)
+        self.tray = QSystemTrayIcon(self.app.windowIcon(), self.app)
         self.tray.setToolTip("Linux-AI-Assistant\nSağ tıkla → Menü\nSol tıkla → Ayarlar" if _APP_LANG == "tr" else "Linux-AI-Assistant\nRight-click → Menu\nLeft-click → Settings")
         
         def tray_clicked(reason):
