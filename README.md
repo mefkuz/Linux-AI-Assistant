@@ -23,6 +23,16 @@ On startup the app quietly checks the [latest GitHub Release](https://github.com
 
 Notes for non-git installs (ZIP download): in-place update isn't possible — the dialog's **Open Release Page** button takes you to the manual download instead.
 
+The current release is **v1.7.0** ([release notes](docs/releases/v1.7.0.md)). On older versions, the restart prompt may fail to appear after downloading; quit from the tray and start the app again once the update finishes. Settings → Updates reports availability; the tray menu opens the release dialog.
+
+To simulate the update flow without changing your installation or contacting a provider:
+
+```bash
+./venv/bin/python tests/manual/simulate_update.py --output /tmp/linux-ai-update-preview
+```
+
+This exercises real Qt dialogs and a temporary Git upgrade, preserves synthetic user settings/logs and saves preview images and a JSON report. Dependency installation is simulated.
+
 ## Tool Calling
 
 When **Tool Calling** is enabled (Settings → Security, active in Remote/Local API modes and Codex terminal mode), the model receives 13 function tools and calls them as needed — no keywords required:

@@ -260,6 +260,7 @@ class Communicate(QObject):
     show_response     = pyqtSignal(str) # text
     show_context_btns = pyqtSignal(object) # list of dicts
     update_checked = pyqtSignal(object, object) # info dict, silent bool
+    update_finished = pyqtSignal(object, object) # result dict, dialog
     hide_context_btns = pyqtSignal()
 
 # ──────────────────────────────────────────────────────────
@@ -1080,10 +1081,13 @@ class ResponseWindow(QDialog):
 
 # ──────────────────────────────────────────────────────────
 class SettingsWindow(QWidget):
+    update_result = pyqtSignal(object)
+
     def __init__(self, settings, hotkey_manager):
         super().__init__()
         self.settings       = settings
         self.hotkey_manager = hotkey_manager
+        self.update_result.connect(self._manual_update_result, Qt.ConnectionType.QueuedConnection)
         # Pencere kapansa bile uygulamadan çıkılmasın
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         # Normal pencere — keyboard grab yapmaz
@@ -1106,18 +1110,21 @@ class SettingsWindow(QWidget):
 
         def _bg():
             info = updater.check_for_updates()
-            cur = (info.get("current_version") or __version__)
-            if not info.get("ok"):
-                msg = tr("Güncelleme denetimi başarısız.")
-            elif info.get("update_available"):
-                v = info.get("latest_version", "")
-                msg = f"{tr('Yeni sürüm mevcut')}: v{v} (v{cur} → v{v})."
-            else:
-                msg = f"{tr('Kullanılabilir güncelleme yok.')} (v{cur})"
-            QTimer.singleShot(0, lambda: (self.upd_status_lbl.setText(msg),
-                                          self.upd_now_btn.setEnabled(True)))
+            self.update_result.emit(info)
 
         threading.Thread(target=_bg, daemon=True).start()
+
+    def _manual_update_result(self, info):
+        cur = info.get('current_version') or __version__
+        if not info.get('ok'):
+            msg = tr('Güncelleme denetimi başarısız.')
+        elif info.get('update_available'):
+            v = info.get('latest_version', '')
+            msg = f"{tr('Yeni sürüm mevcut')}: v{v} (v{cur} → v{v})."
+        else:
+            msg = f"{tr('Kullanılabilir güncelleme yok.')} (v{cur})"
+        self.upd_status_lbl.setText(msg)
+        self.upd_now_btn.setEnabled(True)
 
     def _init_ui(self):
         self.setWindowTitle(tr("Linux AI Assistant — Ayarlar"))
@@ -1673,6 +1680,7 @@ class AppManager:
         self.comm.ask_clipboard.connect(self._ask_clipboard_gui, Q)
         self.comm.show_response.connect(self._show_response_gui, Q)
         self.comm.update_checked.connect(self._on_update_checked, Q)
+        self.comm.update_finished.connect(self._after_update, Q)
         self.waveform     = WaveformWidget(self.settings)
         self.overlay      = OverlayWindow(self.settings, self.waveform)
         
@@ -1782,7 +1790,7 @@ class AppManager:
                     res = updater.perform_update(PROJECT_ROOT)
                 except Exception as e:
                     res = {"ok": False, "restart_needed": False, "message": str(e)}
-                QTimer.singleShot(0, lambda: _after_update(res, dlg))
+                self.comm.update_finished.emit(res, dlg)
 
             threading.Thread(target=_bg, daemon=True).start()
 

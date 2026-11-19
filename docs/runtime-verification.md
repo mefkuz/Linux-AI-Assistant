@@ -7,7 +7,7 @@ settings, logs, screenshots, recordings and clipboard data are excluded.
 
 ## Automated coverage
 
-- 72 unittest tests and the existing 149 script checks passed.
+- 73 unittest tests and the existing 149 script checks passed.
 - The same 13 application tool schemas are registered for API and Codex.
 - A representative plain-text clarification is routed into the question dialog
   instead of being shown as an ordinary final answer.
@@ -79,3 +79,16 @@ Opt-in synthetic test (provider usage applies):
 ```bash
 ./venv/bin/python tests/manual/test_annotated_answers_live.py
 ```
+
+## Release upgrade simulation
+
+- v1.6.0 → v1.7.0 detection, release notes, Later, Skip and manual override
+  passed with real Qt dialogs offscreen.
+- A background install result reaches the GUI and opens the restart prompt.
+  Settings background checks also update their status on the GUI thread.
+- A real fast-forward pull in temporary local repositories installs the new
+  fixture while preserving ignored settings/logs. Already-current, conflicting
+  local edits and ZIP installation paths were exercised. pip invocation was
+  recorded without installing packages or using the network.
+- Preview PNGs and report.json are generated outside the repository by
+  tests/manual/simulate_update.py; a regression test runs the same simulation.
