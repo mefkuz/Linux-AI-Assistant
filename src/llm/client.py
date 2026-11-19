@@ -3,7 +3,8 @@ import logging
 import os
 from src.llm.cli_registry import KNOWN_CLI_TOOLS, build_cli_command
 from src.core.i18n import tr
-from src.tools.questions import UserQuestionCancelled, question_was_cancelled, clarification_question
+from src.tools.questions import (UserQuestionCancelled, question_was_cancelled, clarification_question,
+                                 visual_question_request, VisualAnswer, drain_answer_images, api_answer_content)
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 def _short_err(text, limit=500):
     """HTTP hata gövdesini (HTML/JSON) kullanıcı dostu uzunluğa indirir."""
     text = str(text or "")
+    import re
+    text = re.sub(r'data:image/[^;,\s]+;base64,[A-Za-z0-9+/=]+', '[image omitted]', text)
     if len(text) <= limit:
         return text
     return text[:limit] + tr("\n... ({n} karakter kesildi)").format(n=len(text) - limit)
@@ -84,10 +87,20 @@ class LLMClient:
                 "`web_search`+`fetch_web_page` (İNTERNET: "
                 "güncel bilgi gerektiğinde MUTLAKA bunları kullan; shell ile web kazıma YASAK)."
                 " Kullanıcının isteğini gerçekleştirmek için gerekli bilgi eksik veya belirsizse "
-                "`ask_user` ile sor ve yanıtı kullanarak devam et. Geçmişte zaten verilmiş bilgiyi "
+                "`ask_user` ile sor ve yanıtı kullanarak devam et. Bilgi yeterliyse doğrudan ilerle; "
+                "rutin onay, durum bildirimi veya isteğe bağlı sohbet için soru penceresi açma. "
+                "Önce mevcut bağlamı ve önceki yanıtları kullan; yalnızca gerekli eksik bilgiyi sor. "
+                "Seçenekleri ancak seçimi kolaylaştırıyorsa, görseli ancak görsel belirsizliği "
+                "çözmek gerekiyorsa ekle. Kullanıcıdan gereksiz çizim veya görsel isteme. "
+                "Geçmişte zaten verilmiş bilgiyi "
                 "tekrar sorma. Kullanıcı iptal ederse bağımlı işlemleri yapma; tahmin etme."
                 " AÇIKLAMA SORUSU normal yanıt değildir: 'Neyi kastettiniz?', 'Hangisini "
                 "istiyorsunuz?' gibi soruları son yanıt olarak yazma; MUTLAKA ask_user çağır."
+                " Soruna image_paths ile yerel görsel veya screenshot=true ile ekran görüntüsü ekleyebilirsin. "
+                "Görsele işaret ekleme; kullanıcı yalnızca senin eklediğin görseli işaretleyebilir. "
+                "Yalnızca işaretleme sorusu soracaksan önce read_screen_text çağırma; "
+                "doğrudan ask_user screenshot=true kullan. OCR ve soru eki aynı ekran karesini kullanır. "
+                "Kullanıcının mavi işaretleri referanstır, otomatik tıklama yetkisi değildir."
             )
 
         if mode == "cli" and not self._is_codex() and not skip_injection:
@@ -185,8 +198,12 @@ class LLMClient:
     def _ask_user(self, request):
         from src.tools.questions import ask_in_terminal
         answer = (self.question_callback or ask_in_terminal)(request)
-        if isinstance(answer, str) and answer.strip():
-            self._clarifications.append({"question": request["question"], "answer": answer.strip()})
+        text = answer
+        if isinstance(answer, VisualAnswer):
+            from src.tools.image_annotations import prepare_visual_answer
+            text, _ = prepare_visual_answer(answer)
+        if isinstance(text, str) and text.strip():
+            self._clarifications.append({"question": request["question"], "answer": text.strip()})
         return answer
 
     def _call_local(self, system_prompt, user_prompt, history=None, allow_tools=True):
@@ -286,6 +303,14 @@ class LLMClient:
 
             resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
 
+            if not resp.ok and resp.status_code in (400, 422) and any(
+                    isinstance(m.get('content'), list) and any(p.get('type') == 'image_url' for p in m['content'])
+                    for m in messages) and any(word in resp.text.lower() for word in ('image', 'vision', 'multimodal')):
+                for m in messages:
+                    if isinstance(m.get('content'), list):
+                        m['content'] = '\n'.join(p.get('text', '') for p in m['content'] if p.get('type') == 'text')
+                messages.append({'role': 'user', 'content': 'Bu model görseli kabul etmedi. İşaretli bölgelerin OCR metni ve konumlarıyla devam et; görseli gördüğünü varsayma.'})
+                continue
             # tools parametresini desteklemeyen sunucu → tools'suz tek deneme
             if not resp.ok and tools_supported and resp.status_code == 400 and "tool" in resp.text.lower():
                 logger.warning("Sunucu 'tools' parametresini reddetti, tools'suz devam ediliyor.")
@@ -301,7 +326,7 @@ class LLMClient:
                 content = message.get("content") or ""
                 question = clarification_question(content)
                 if question:
-                    result = executor.execute_tool("ask_user", {"question": question})
+                    result = executor.execute_tool("ask_user", visual_question_request(question))
                     if "ask_user" not in self.last_tools_used:
                         self.last_tools_used.append("ask_user")
                     if question_was_cancelled("ask_user", result):
@@ -310,7 +335,7 @@ class LLMClient:
                     answer = json.loads(result)["answer"]
                     messages.extend([
                         {"role": "assistant", "content": question},
-                        {"role": "user", "content": "Açıklama sorusuna yanıtım: " + answer},
+                        {"role": "user", "content": api_answer_content("Açıklama sorusuna yanıtım: " + answer, drain_answer_images(executor))},
                     ])
                     continue
                 return content
@@ -323,6 +348,7 @@ class LLMClient:
             })
 
             has_question = any(c.get("function", {}).get("name") == "ask_user" for c in tool_calls)
+            answer_images = []
             # Model-prepared actions in a question's batch cannot yet reflect
             # the user's answer. Ask first and have the model regenerate those
             # actions with the new information before anything is executed.
@@ -350,6 +376,10 @@ class LLMClient:
                 })
                 if question_was_cancelled(name, result):
                     raise UserQuestionCancelled()
+                answer_images.extend(drain_answer_images(executor))
+            if answer_images:
+                messages.append({'role': 'user', 'content': api_answer_content(
+                    'Gönder ile paylaştığım işaretli görseller. OCR/bölge açıklamaları ilgili araç yanıtındadır.', answer_images)})
 
         logger.warning(f"Tool döngüsü üst sınıra ulaştı ({max_iter}), son yanıt döndürülüyor.")
         # Üst sınıra ulaşıldıysa son bir tools'suz çağrı ile özet yanıt al.

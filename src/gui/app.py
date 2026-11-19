@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QSystemTrayIcon, QMenu, QMessageBox,
     QTabWidget, QSpinBox, QCheckBox, QFormLayout, QSizePolicy,
     QListWidget, QListWidgetItem, QAbstractItemView, QStackedWidget,
-    QFileDialog, QTextEdit, QDialog, QDialogButtonBox, QFrame
+    QFileDialog, QTextEdit, QDialog, QDialogButtonBox, QFrame, QButtonGroup, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QEvent
 from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap, QPen, QKeyEvent, QKeySequence
@@ -51,6 +51,7 @@ from src.audio.listener import AudioListener
 from src.llm.router import Router
 from src.llm.client import LLMClient
 from src.llm.cli_registry import KNOWN_CLI_TOOLS
+from src.tools.questions import compose_answer, VisualAnswer
 from src.context.helper import get_active_contexts
 from src.core.i18n import set_language as set_core_lang
 from src.core import updater
@@ -65,6 +66,27 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 
 TRANSLATIONS = {
+    "Sürükleyerek işaretle. (Yalnızca görsel destekleyen modeller içindir.)": "Drag to mark. (For vision-capable models only.)",
+    "En fazla dört görsel eklenebilir.": "You can attach up to four images.",
+    "Ekran görüntüsü alınıyor...": "Capturing screenshot...",
+    "Burası.": "Here.",
+    "Görsel ekle": "Add image",
+    "Ekranı ekle": "Add screenshot",
+    "İşaretle": "Mark up",
+    "Kaldır": "Remove",
+    "Görseli işaretle": "Mark up image",
+    "Sürükleyerek işaretle. İşaretlerin mavi renkte gösterilir.": "Drag to mark. Your marks are shown in blue.",
+    "Daire": "Circle",
+    "Ok": "Arrow",
+    "Kutu": "Box",
+    "Etiket (isteğe bağlı)": "Label (optional)",
+    "Geri al": "Undo",
+    "İşaretleri temizle": "Clear marks",
+    "İşaretleri kullan": "Use marks",
+    "Seçim: {option}": "Selection: {option}",
+    "Büyüt": "Enlarge",
+    "Görsel": "Image",
+    "Görsel gösterilemedi.": "Could not display the image.",
     "Sesle yanıtla": "Answer by voice",
     "Sesli girişi iptal et": "Cancel voice input",
     "Mikrofon hazırlanıyor...": "Preparing microphone...",
@@ -634,6 +656,9 @@ class UserQuestionDialog(QDialog):
     def __init__(self, request, parent=None, settings=None):
         super().__init__(parent)
         self.answer = None
+        self.selected_option = None
+        self._attachments = [dict(a) for a in request.get('attachments', [])]
+        self._user_marks = {}
         self._voice_settings = settings
         self._voice_active = False
         self._closed = False
@@ -651,13 +676,28 @@ class UserQuestionDialog(QDialog):
         question.setTextFormat(Qt.TextFormat.PlainText)
         question.setWordWrap(True)
         layout.addWidget(question)
+        self.attachment_previews = []
+        self._add_question_images(request, layout)
+        self.image_status_label = QLabel()
+        self.image_status_label.setWordWrap(True)
+        self.image_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self.image_status_label)
         self.option_buttons = []
+        self.option_group = QButtonGroup(self)
+        self.option_group.setExclusive(True)
         for option in request.get("options", []):
             button = QPushButton(option)
             button.setAutoDefault(False)
+            button.setCheckable(True)
+            self.option_group.addButton(button)
             button.clicked.connect(lambda checked=False, value=option: self._choose_option(value))
             self.option_buttons.append(button)
             layout.addWidget(button)
+        self.selection_label = QLabel()
+        self.selection_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.selection_label.setWordWrap(True)
+        self.selection_label.hide()
+        layout.addWidget(self.selection_label)
         self.answer_input = QTextEdit()
         self.answer_input.setAcceptRichText(False)
         self.answer_input.setPlaceholderText(tr("Yanıtını yaz..."))
@@ -689,17 +729,135 @@ class UserQuestionDialog(QDialog):
         self.answer_input.setFocus()
 
     def _choose_option(self, option):
-        self.answer = option
-        self.accept()
+        self.selected_option = option
+        self.selection_label.setText(tr("Seçim: {option}").format(option=option))
+        self.selection_label.show()
+        self._update_send_state()
+        self.answer_input.setFocus()
 
     def _submit_text(self):
-        answer = self.answer_input.toPlainText().strip()
-        if answer and not self._voice_active:
+        answer = compose_answer(self.selected_option, self.answer_input.toPlainText())
+        marks = [dict(m, image=i) for i, entries in self._user_marks.items() for m in entries]
+        if (answer or marks) and not self._voice_active:
+            if marks:
+                from src.tools.image_annotations import validate_annotations
+                try:
+                    validate_annotations(marks)
+                except ValueError as exc:
+                    self.image_status_label.setText(str(exc))
+                    return
+                self.answer = VisualAnswer(answer or tr('Burası.'), list(self._attachments), marks,
+                                           True)
+                self.accept()
+                return
             self.answer = answer
             self.accept()
 
     def _update_send_state(self):
-        self.send_button.setEnabled(bool(self.answer_input.toPlainText().strip()) and not self._voice_active)
+        marked = any(self._user_marks.values())
+        self.send_button.setEnabled(bool(self.selected_option or self.answer_input.toPlainText().strip() or marked)
+                                    and not self._voice_active)
+
+    def _shown_image(self, index):
+        from src.tools.question_images import decode_image
+        from src.tools.image_annotations import render_annotations
+        image = decode_image(self._attachments[index]['data'])
+        if self._user_marks.get(index):
+            image = render_annotations(image, self._user_marks[index])
+        return image
+
+    def _add_question_images(self, request, layout):
+        self._gallery_scroll = QScrollArea()
+        self._gallery_scroll.setWidgetResizable(True)
+        self._gallery_scroll.setMaximumHeight(260)
+        self._gallery_scroll.setMinimumHeight(240)
+        layout.addWidget(self._gallery_scroll)
+        self._rebuild_images()
+        for error in request.get("attachment_errors", []):
+            notice = QLabel(error)
+            notice.setTextFormat(Qt.TextFormat.PlainText)
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
+
+    def _rebuild_images(self):
+        attachments = self._attachments
+        self.attachment_previews = []
+        self._gallery_scroll.setVisible(bool(attachments))
+        if attachments:
+            self.setMinimumWidth(min(640, max(320, self.screen().availableGeometry().width() - 80)))
+            gallery = QWidget()
+            images_layout = QVBoxLayout(gallery)
+            images_layout.setContentsMargins(0, 0, 0, 0)
+            for index, attachment in enumerate(attachments[:4]):
+                try:
+                    pixmap = QPixmap.fromImage(self._shown_image(index))
+                except (ValueError, TypeError, KeyError):
+                    images_layout.addWidget(QLabel(tr("Görsel gösterilemedi.")))
+                    continue
+                preview = QLabel()
+                preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                preview.setPixmap(pixmap.scaled(self.minimumWidth() - 60, 180, Qt.AspectRatioMode.KeepAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation))
+                row = QHBoxLayout()
+                name = attachment.get("name") or tr("Görsel")
+                caption = QLabel(name)
+                caption.setTextFormat(Qt.TextFormat.PlainText)
+                caption.setWordWrap(True)
+                row.addWidget(caption, 1)
+                edit = QPushButton(tr('İşaretle'))
+                edit.setAutoDefault(False)
+                edit.clicked.connect(lambda checked=False, i=index: self._edit_image(i))
+                row.addWidget(edit)
+                remove = QPushButton(tr('Kaldır'))
+                remove.setAutoDefault(False)
+                remove.clicked.connect(lambda checked=False, i=index: self._remove_image(i))
+                row.addWidget(remove)
+                enlarge = QPushButton(tr("Büyüt"))
+                enlarge.setAutoDefault(False)
+                enlarge.clicked.connect(lambda checked=False, image=pixmap, title=name:
+                                        self._show_image_preview(image, title))
+                row.addWidget(enlarge)
+                images_layout.addLayout(row)
+                images_layout.addWidget(preview)
+                self.attachment_previews.append(preview)
+            old = self._gallery_scroll.takeWidget()
+            if old is not None:
+                old.deleteLater()
+            self._gallery_scroll.setWidget(gallery)
+
+    def _remove_image(self, index):
+        self._attachments.pop(index)
+        self._user_marks = {i if i < index else i-1: marks for i, marks in self._user_marks.items() if i != index}
+        self._rebuild_images()
+        self._update_send_state()
+
+    def _edit_image(self, index):
+        from src.gui.image_editor import ImageAnnotationDialog
+        from src.tools.question_images import decode_image
+        other_count = sum(len(marks) for i, marks in self._user_marks.items() if i != index)
+        dialog = ImageAnnotationDialog(decode_image(self._attachments[index]['data']),
+            self._user_marks.get(index, []), self, 12-other_count)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._user_marks[index] = list(dialog.canvas.marks)
+            self._rebuild_images()
+            self._update_send_state()
+
+    def _show_image_preview(self, image, title):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        scroll = QScrollArea()
+        label = QLabel()
+        label.setPixmap(image)
+        scroll.setWidget(label)
+        layout.addWidget(scroll)
+        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close.rejected.connect(dialog.reject)
+        layout.addWidget(close)
+        screen = self.screen().availableGeometry()
+        dialog.resize(min(image.width() + 60, int(screen.width() * .85)),
+                      min(image.height() + 100, int(screen.height() * .85)))
+        dialog.exec()
 
     def _voice_icon(self, stop=False):
         icon = QIcon.fromTheme("media-playback-stop" if stop else "audio-input-microphone")

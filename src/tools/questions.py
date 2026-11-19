@@ -2,11 +2,36 @@
 import json
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from src.core.i18n import tr
 
 
 class UserQuestionCancelled(Exception):
     """Stop this request when the user declines to supply required information."""
+
+
+@dataclass
+class VisualAnswer:
+    text: str
+    attachments: list
+    marks: list
+    send_images: bool = False
+    _prepared: object = field(default=None, init=False, repr=False)
+
+
+def drain_answer_images(executor):
+    images = getattr(executor, 'pending_answer_images', [])
+    if not isinstance(images, list):
+        return []
+    executor.pending_answer_images = []
+    return images
+
+
+def api_answer_content(text, images):
+    if not images:
+        return text
+    return [{'type': 'text', 'text': text}] + [
+        {'type': 'image_url', 'image_url': {'url': url}} for url in images]
 
 
 def clarification_question(text):
@@ -45,11 +70,41 @@ def validate_question(arguments):
         raise ValueError("options must be a list of at most 6 strings")
     if any(not isinstance(option, str) or not option.strip() or len(option) > 200 for option in options):
         raise ValueError("each option must be a non-empty string of at most 200 characters")
-    return {"question": question.strip(), "options": list(dict.fromkeys(o.strip() for o in options))}
+    if any(key in arguments for key in ('annotations', 'attachments')):
+        raise ValueError('Only the user can annotate images')
+    request = {"question": question.strip(), "options": list(dict.fromkeys(o.strip() for o in options))}
+    paths = arguments.get('image_paths', [])
+    screenshot = arguments.get('screenshot', False)
+    if type(screenshot) is not bool:
+        raise ValueError('screenshot must be a boolean')
+    if not isinstance(paths, list) or len(paths) + int(screenshot) > 4:
+        raise ValueError('at most four images may be attached')
+    if any(not isinstance(p, str) or not p.strip() or len(p) > 4096 or '://' in p for p in paths):
+        raise ValueError('image_paths must contain local file paths')
+    if paths:
+        request['image_paths'] = list(dict.fromkeys(p.strip() for p in paths))
+    if screenshot:
+        request['screenshot'] = True
+    return request
+
+
+def compose_answer(option, details):
+    details = details.strip()
+    if option and details:
+        return tr("Seçim: {option}\nEk açıklama: {details}").format(option=option, details=details)
+    return option or details
+
+
+def visual_question_request(question):
+    return {"question": question}
 
 
 def ask_in_terminal(request):
     print("\n" + request["question"], flush=True)
+    if request.get("attachments"):
+        print(tr("Görseller grafik arayüzde gösterilir; bu terminalde önizlenemiyor."), flush=True)
+    for error in request.get("attachment_errors", []):
+        print(error, flush=True)
     for index, option in enumerate(request["options"], 1):
         print(f"  {index}. {option}", flush=True)
     try:
@@ -59,7 +114,12 @@ def ask_in_terminal(request):
                 return None
             if answer:
                 if answer.isdecimal() and 1 <= int(answer) <= len(request["options"]):
-                    return request["options"][int(answer) - 1]
+                    selected = request["options"][int(answer) - 1]
+                    print(tr("Seçim: {option}").format(option=selected), flush=True)
+                    details = input(tr("Ek açıklama (isteğe bağlı; Enter = gönder, /cancel = iptal): ")).strip()
+                    if details.lower() == "/cancel":
+                        return None
+                    return compose_answer(selected, details)
                 return answer
     except (EOFError, KeyboardInterrupt):
         return None

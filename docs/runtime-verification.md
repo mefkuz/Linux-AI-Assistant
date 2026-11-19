@@ -7,7 +7,7 @@ settings, logs, screenshots, recordings and clipboard data are excluded.
 
 ## Automated coverage
 
-- 52 unittest tests and the existing 149 script checks passed.
+- 72 unittest tests and the existing 149 script checks passed.
 - The same 13 application tool schemas are registered for API and Codex.
 - A representative plain-text clarification is routed into the question dialog
   instead of being shown as an ordinary final answer.
@@ -48,3 +48,34 @@ Run automated checks with:
 The scripts in `tests/manual/` are opt-in: live model tests may consume provider
 usage, and the desktop smoke test opens a temporary window. They load credentials
 locally at runtime; credentials are never embedded in the test sources.
+
+## AI-provided images and user annotations
+
+- API and Codex questions can include local images or a screenshot. Workspace
+  and screen-reading permissions apply; attachments never upload automatically.
+  AI annotations and raw attachment arguments are rejected.
+- Users can draw circles, arrows or boxes on AI-provided images, label them and
+  combine them with typed or voice input. They cannot add an image or screenshot
+  in the dialog. Only Send submits the reply.
+- The native editor supports undo, clear and cancel. Blue marks stay relative
+  to the original image when resized; original images remain unchanged.
+- The question dialog has no image-mode checkbox or OCR explanation. The large
+  editor contains a short vision-model note. Committing marks prepares annotated
+  copies; only Send uploads them. Plain text answers do not upload image pixels.
+  Image bytes are excluded from conversation history; submitted OCR text can
+  enter enabled memory. API image rejection retains OCR/coordinate fallback.
+- Screen OCR and a screenshot question reuse the exact same capture, even if OCR
+  finds no text. Cached pixels are cleared after answering or screen-changing
+  actions and are never shared between requests. Private OCR files are removed.
+- Model instructions reserve questions for necessary missing information and
+  choices/images for clarifications that need them, avoiding routine prompts.
+- Automated tests cover blocked AI annotations, permitted AI images, user editing, explicit
+  submission, cancellation, limits, private OCR files and nonvision API fallback.
+- Real Codex and the configured API previously passed synthetic user-annotation
+  replies in OCR-only and image modes. The manual tests use model-provided synthetic images and user-only annotations.
+
+Opt-in synthetic test (provider usage applies):
+
+```bash
+./venv/bin/python tests/manual/test_annotated_answers_live.py
+```

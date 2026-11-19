@@ -137,14 +137,19 @@ def get_openai_tools():
             "type": "function",
             "function": {
                 "name": "ask_user",
-                "description": "Eksik veya belirsiz bilgiyi kullanıcıya sor; yanıtı bekle. İsteğe bağlı seçenekler sun. İptalde tahmin etme, görevi durdur.",
+                "description": "Yalnızca görev için gerekli bilgi eksikse sor. Bilgi yeterliyse devam et. Seçenek ve görseli ancak gerekiyorsa ekle; işaretlemeyi kullanıcı yapar. Gönder yanıtını bekle; iptalde dur.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "question": {"type": "string", "minLength": 1, "maxLength": 2000},
                         "options": {"type": "array", "maxItems": 6, "items": {
                             "type": "string", "minLength": 1, "maxLength": 200}},
+
+                        "image_paths": {"type": "array", "maxItems": 4, "items": {"type": "string"},
+                                        "description": "Soruda gösterilecek yerel görsellerin yolları."},
+                        "screenshot": {"type": "boolean", "description": "Soruyla güncel ekran görüntüsünü göster."},
                     },
+                    "additionalProperties": False,
                     "required": ["question"],
                 },
             },
@@ -391,7 +396,7 @@ def _ocr_image(png_path, txt_base):
     return ""
 
 
-def read_screen_via_ocr():
+def read_screen_via_ocr(attachment=None, screenshot_callback=None):
     """
     Ekran görüntüsü alıp tesseract OCR ile metne çevirir.
     Hassas geçici dosyaları kullandıktan sonra siler.
@@ -399,6 +404,16 @@ def read_screen_via_ocr():
     Not: KDE Wayland'da spectacle bazen boş/kilitli kare yakalar.
     Bu yüzden en fazla 3 kare denenir, ilk anlamlı sonuç (>20 karakter) alınır.
     """
+    if attachment is not None or screenshot_callback is not None:
+        from src.tools.question_images import capture_screenshot
+        attachment = attachment if attachment is not None else capture_screenshot()
+        if screenshot_callback is not None:
+            screenshot_callback(attachment)
+        with tempfile.TemporaryDirectory(prefix="linux-ai-ocr-") as directory:
+            path = os.path.join(directory, 'screen.png')
+            with open(path, 'wb') as handle:
+                handle.write(attachment['data'])
+            return _ocr_image(path, os.path.join(directory, 'screen'))
     import os as _os
     import subprocess as _sp
     import time as _time
@@ -616,6 +631,8 @@ class ToolExecutor:
         self.security = SecurityManager(confirm_callback=confirm_callback)
         self.browser_sender = browser_sender
         self.question_callback = question_callback
+        self.pending_answer_images = []
+        self._screen_snapshot = None
 
     # -- ayar yardımcıları ---------------------------------
 
@@ -769,6 +786,8 @@ class ToolExecutor:
                 self._log_tool_call(name, args, "kullanıcı-reddetti")
                 return tr("Kullanıcı bu işlemi reddetti. İşlem yapılmadı.")
 
+        if name not in READ_ONLY_TOOLS and name not in SENSITIVE_READ_TOOLS:
+            self._screen_snapshot = None
         try:
             result = handler(args)
             status = "tamam"
@@ -777,6 +796,8 @@ class ToolExecutor:
             result = tr("Araç çalıştırılırken hata ({name}): {e}").format(name=name, e=e)
             status = "hata"
         finally:
+            if name == 'ask_user':
+                self._screen_snapshot = None
             self._log_tool_call(name, args, status)
 
         result = str(result)
@@ -801,17 +822,58 @@ class ToolExecutor:
     # -- araç implementasyonları ----------------------------
 
     def _tool_ask_user(self, args):
-        from src.tools.questions import validate_question, ask_in_terminal
+        from src.tools.questions import validate_question, ask_in_terminal, VisualAnswer
+        from src.tools.image_annotations import prepare_visual_answer
+        self.pending_answer_images = []
         request = validate_question(args)
+        self._prepare_question_images(request)
         callback = self.question_callback or ask_in_terminal
         try:
             answer = callback(request)
         except (Exception, KeyboardInterrupt) as exc:
             logger.warning("Kullanıcı sorusu yanıtlanamadı: %s", exc)
             answer = None
+        if isinstance(answer, VisualAnswer):
+            answer, self.pending_answer_images = prepare_visual_answer(answer)
         if not isinstance(answer, str) or not answer.strip():
             return json.dumps({"status": "cancelled", "answer": None}, ensure_ascii=False)
-        return json.dumps({"status": "answered", "answer": answer.strip()}, ensure_ascii=False)
+        result = json.dumps({"status": "answered", "answer": answer.strip()}, ensure_ascii=False)
+        while len(result) > MAX_TOOL_OUTPUT_CHARS:
+            answer = answer[:max(1,int(len(answer)*.8))]
+            result = json.dumps({"status": "answered", "answer": answer + '…'}, ensure_ascii=False)
+        return result
+
+    def _prepare_question_images(self, request):
+        from src.tools.question_images import load_attachment, capture_screenshot
+        attachments, errors = [], []
+        for path in request.pop("image_paths", []):
+            try:
+                arguments = {"path": os.path.expanduser(path)}
+                allowed, _ = self._precheck_workspace_escape("read_file", arguments)
+                if not allowed:
+                    raise ValueError(tr("Görsele erişim izni verilmedi."))
+                resolved = self._resolve_inside_workspace(arguments["path"],
+                    allow_escape=bool(arguments.get("_escape_allowed")))
+                attachments.append(load_attachment(resolved))
+            except (OSError, ValueError) as exc:
+                errors.append(tr("Görsel eklenemedi: {error}").format(error=str(exc)))
+        if request.pop("screenshot", False):
+            auto_allow = self.settings.get("auto_allow_clipboard", False) if self.settings else False
+            title, question = SENSITIVE_READ_TOOLS["read_screen_text"]
+            allowed = self._screen_snapshot is not None or auto_allow or self.security.ask_confirmation({"title": tr(title), "question": tr(question)})
+            if allowed:
+                try:
+                    if self._screen_snapshot is None:
+                        self._screen_snapshot = capture_screenshot()
+                    attachments.append(dict(self._screen_snapshot))
+                except (OSError, ValueError) as exc:
+                    errors.append(tr("Görsel eklenemedi: {error}").format(error=str(exc)))
+            else:
+                errors.append(tr("Ekran görüntüsüne izin verilmedi."))
+        if attachments:
+            request["attachments"] = attachments
+        if errors:
+            request["attachment_errors"] = errors
 
     def _tool_run_shell_command(self, args):
         command = (args.get("command") or "").strip()
@@ -910,8 +972,12 @@ class ToolExecutor:
             return tr("(Pano boş veya okunamadı)")
         return tr("[Panodaki Metin]:") + f"\n{text}"
 
+    def _remember_screenshot(self, attachment):
+        self._screen_snapshot = dict(attachment)
+
     def _tool_read_screen_text(self, args):
-        text = read_screen_via_ocr()
+        text = read_screen_via_ocr(attachment=self._screen_snapshot,
+                                   screenshot_callback=self._remember_screenshot)
         if not text.strip():
             return tr("(Ekrandan metin okunamadı)")
         return tr("[Ekrandaki Metin (OCR)]:") + f"\n{text}"

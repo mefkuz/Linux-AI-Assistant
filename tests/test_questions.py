@@ -66,7 +66,7 @@ class QuestionTests(unittest.TestCase):
 
     def test_terminal_options_free_text_and_cancellation(self):
         request = {"question": "Q?", "options": ["A", "B"]}
-        for inputs, expected in [(["2"], "B"), (["", "Özel yanıt"], "Özel yanıt"),
+        for inputs, expected in [(["2", ""], "B"), (["", "Özel yanıt"], "Özel yanıt"),
                                  (["/cancel"], None), ([EOFError()], None), ([KeyboardInterrupt()], None)]:
             with self.subTest(inputs=inputs), patch("builtins.input", side_effect=inputs), patch("builtins.print"):
                 self.assertEqual(ask_in_terminal(request), expected)
@@ -209,7 +209,12 @@ assert d.layout().contentsMargins() == baseline.layout().contentsMargins()
 assert d.layout().spacing() == baseline.layout().spacing()
 assert not d.send_button.isEnabled()
 assert d.answer is None
-QTimer.singleShot(0, d.option_buttons[1].click)
+def select_then_send():
+    d.option_buttons[1].click()
+    assert d.answer is None and not d._closed
+    assert d.send_button.isEnabled()
+    d.send_button.click()
+QTimer.singleShot(0, select_then_send)
 assert d.exec() == QDialog.DialogCode.Accepted
 assert d.answer == 'B'
 d = UserQuestionDialog(request)
@@ -235,7 +240,10 @@ for cancel in (False, True):
             QTimer.singleShot(10, respond)
             return
         if cancel: current.reject()
-        else: current.option_buttons[0].click()
+        else:
+            current.option_buttons[0].click()
+            assert current.answer is None and worker.is_alive()
+            current.send_button.click()
     QTimer.singleShot(20, respond)
     worker.start()
     while worker.is_alive(): app.processEvents()

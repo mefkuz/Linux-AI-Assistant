@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from src.tools.questions import UserQuestionCancelled, question_was_cancelled, clarification_question
+from src.tools.questions import UserQuestionCancelled, question_was_cancelled, clarification_question, visual_question_request, drain_answer_images
 
 
 class CodexSession:
@@ -116,8 +116,10 @@ class CodexSession:
             if method == "item/tool/call":
                 name = params.get("tool", "")
                 result = self.execute_app_tool(name, params.get("arguments", {}))
+                content = [{"type": "inputText", "text": result}]
+                content.extend({'type': 'inputImage', 'imageUrl': url} for url in drain_answer_images(self.executor))
                 self.send({"id": event["id"], "result": {
-                    "contentItems": [{"type": "inputText", "text": result}], "success": True,
+                    "contentItems": content, "success": True,
                 }})
                 if question_was_cancelled(name, result):
                     raise UserQuestionCancelled()
@@ -210,17 +212,18 @@ class CodexSession:
                 return output
             if self.tool_calls >= self.max_calls:
                 raise RuntimeError("Açıklama sorusu limiti doldu; istek tamamlanamadı.")
-            result = self.execute_app_tool("ask_user", {"question": question})
+            result = self.execute_app_tool("ask_user", visual_question_request(question))
             if question_was_cancelled("ask_user", result):
                 raise UserQuestionCancelled()
             answer = json.loads(result)["answer"]
+            images = drain_answer_images(self.executor)
             self.messages = []
             self.completed = False
             # Continue the same thread, preserving prior tools and context.
             self.request("turn/start", {
                 "threadId": thread,
                 "input": [{"type": "text", "text": "Açıklama sorusuna yanıtım: " + answer,
-                           "text_elements": []}],
+                           "text_elements": []}] + [{'type': 'image', 'url': url} for url in images],
             })
 
     def __exit__(self, *args):

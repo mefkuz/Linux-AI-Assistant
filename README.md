@@ -86,11 +86,19 @@ When an instruction lacks information needed to carry it out, the AI can call `a
 
 The model is instructed to call `ask_user` for clarification rather than writing the question as a final response. A conservative fallback also recognizes short direct clarification replies (such as “Neyi kastettiniz?”), opens the same question dialog and continues with the answer. Ordinary explanations containing question marks are kept as responses. Codex continues in the same thread so its previous context and tools are preserved.
 
-The GUI uses the same native dialog layout as the existing confirmation windows. Choose an offered answer (up to six choices), or type your own answer and press Send. Nothing is selected or submitted automatically. Closing the window or pressing Cancel stops the request and its remaining tool actions. The overlay reports cancellation instead of success. Questions do not trigger a second permission dialog; file/command permissions continue to apply separately.
+The GUI uses the same native dialog layout as the existing confirmation windows. Select an offered answer (up to six choices), optionally add text or dictate extra details, then press Send. Selecting an option never submits it; changing the option preserves the text you have written. You can also answer with text alone. Nothing is selected or submitted automatically. Closing the window or pressing Cancel stops the request and its remaining tool actions. The overlay reports cancellation instead of success. Questions do not trigger a second permission dialog; file/command permissions continue to apply separately.
+
+The AI can attach **local images or a screenshot** to its question using `ask_user.image_paths` or `ask_user.screenshot`. Local paths follow workspace permissions, and screenshots require the existing screen-reading permission. The AI cannot draw annotations. Users cannot add their own images or screenshots in the question dialog.
+
+On an AI-provided image, choose **Mark up** to circle, box or point to a region and optionally label it. Choose **Use marks**, say or type “here”, then press **Send** yourself. Your marks appear blue. Undo, Clear and Cancel are available; originals are preserved. Enlarge opens a full-resolution preview without submitting. Up to four images are supported (PNG, JPEG, WebP, BMP or the first GIF frame), capped at 8 MB and 16 million pixels each. Screenshot files are private and temporary; remote image URLs are not fetched.
+
+The question window stays uncluttered: there is no image-mode checkbox or OCR explanation. The large markup editor contains a short vision-model note. Marking and choosing **Use marks** prepares the annotated copy; only **Send** transmits it with the reply. A plain answer without marks does not upload the image. API servers that reject images retry with OCR and coordinates. Image payloads stay out of tool-result text and conversation memory; submitted OCR text can enter enabled memory.
+
+Within a tool request, screen OCR and a subsequent screenshot question share the same captured image. The cache is private to that request and cleared after the question or an action that may change the screen. A markup-only question can capture directly without an extra OCR call. Questions, choices and image attachments are requested only when needed to resolve missing information; the model is instructed to continue directly when the existing context is sufficient.
 
 The question dialog also has a **microphone icon**. Click it, speak, then pause: the transcript is inserted into the answer field, preserving the other text. It is **never submitted automatically**; edit it if needed and press Send. During recording, the icon becomes a stop button that cancels voice input. Closing the question stops recording and discards late transcription results. Microphone or speech-service failures are shown in the same dialog and leave typing available. Voice answers use the existing speech language and speech-recognition service; no new dependency is required.
 
-In terminal chat, type an option number or your own text. `/cancel`, Ctrl+C or end-of-input cancels the question. End-of-input also exits terminal chat cleanly.
+In terminal chat, type an option number or your own text. Selecting a number opens an optional details prompt; press Enter there to send the choice with any details, or `/cancel` to cancel. `/cancel`, Ctrl+C or end-of-input cancels the question. End-of-input also exits terminal chat cleanly.
 
 The answer is returned to the model so it can continue the task. When conversation memory is enabled, clarification answers are included in the stored user turn so follow-ups can use them; Clear Memory removes them. Internal dictation cleanup has no tools and cannot open questions. If an API response batches a question with prewritten actions, those actions are deferred until the model has seen the answer and generates updated calls.
 
@@ -99,8 +107,12 @@ For example, asking to create a note while leaving its filename unspecified lets
 ```bash
 ./venv/bin/python tests/test_questions.py -v
 ./venv/bin/python tests/test_question_voice.py -v
+./venv/bin/python tests/test_question_images.py -v
+./venv/bin/python tests/test_image_annotations.py -v
 # Opt-in live tests: real Codex and saved API; temporary files, no visible windows.
 ./venv/bin/python tests/manual/test_questions_live.py
+./venv/bin/python tests/manual/test_question_images_live.py
+./venv/bin/python tests/manual/test_annotated_answers_live.py
 ```
 
 ## Conversation Memory
